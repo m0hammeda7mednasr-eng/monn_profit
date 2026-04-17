@@ -6,8 +6,30 @@ export const normalizeApiBase = (value) =>
     .trim()
     .replace(/\/+$/, "");
 
+const ensureApiPath = (value) => {
+  const normalized = normalizeApiBase(value);
+
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    const url = new URL(normalized);
+    const path = url.pathname.replace(/\/+$/, "");
+
+    if (!path) {
+      url.pathname = "/api";
+      return normalizeApiBase(url.toString());
+    }
+  } catch {
+    // Relative API bases like /api are valid for Vercel rewrites.
+  }
+
+  return normalized;
+};
+
 export const resolveApiBase = (env = process.env) => {
-  const configuredBase = normalizeApiBase(
+  const configuredBase = ensureApiPath(
     env.REACT_APP_API_BASE_URL || env.REACT_APP_API_URL,
   );
 
