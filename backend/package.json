@@ -1,0 +1,46 @@
+{
+  "name": "moon-profit-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Shopify Store Management",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
+    "build": "echo 'No build step required'",
+    "migrate": "node-pg-migrate",
+    "db:setup": "node scripts/setup-database.js"
+  },
+  "jest": {
+    "transform": {}
+  },
+  "keywords": [
+    "shopify",
+    "api",
+    "nodejs",
+    "express"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.100.0",
+    "axios": "^1.6.2",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
+    "multer": "^2.1.1",
+    "node-fetch": "^3.3.2",
+    "redis": "^4.6.13"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "fast-check": "^4.6.0",
+    "jest": "^30.2.0",
+    "node-pg-migrate": "^8.0.4",
+    "nodemon": "^3.0.2",
+    "supertest": "^7.2.2"
+  }
+}
