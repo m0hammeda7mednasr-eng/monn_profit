@@ -18,7 +18,6 @@ import {
   Search,
   ShoppingCart,
   TrendingUp,
-  Truck,
 } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import OrdersExportPanel from "../components/OrdersExportPanel";
@@ -42,10 +41,6 @@ import {
   readCachedView,
   writeCachedView,
 } from "../utils/viewCache";
-import {
-  isShippingIssueClosed,
-  isShippingIssueActive,
-} from "../utils/shippingIssues";
 
 const LIVE_REFRESH_DEBOUNCE_MS = 450;
 const ORDERS_PAGE_FETCH_SIZE = 200;
@@ -991,31 +986,6 @@ export default function Orders() {
     [activeOrders],
   );
 
-  const shippingIssueOrders = useMemo(
-    () => ordersWithMeta.filter((order) => isShippingIssueActive(order)),
-    [ordersWithMeta],
-  );
-
-  const shippingIssueIdSet = useMemo(
-    () =>
-      new Set(
-        shippingIssueOrders
-          .map((order) => String(order?.id || "").trim())
-          .filter(Boolean),
-      ),
-    [shippingIssueOrders],
-  );
-
-  const shippingIssuesSummary = useMemo(
-    () => ({
-      total: shippingIssueOrders.length,
-      openFollowUp: shippingIssueOrders.filter(
-        (order) => !isShippingIssueClosed(order?.shipping_issue?.reason),
-      ).length,
-    }),
-    [shippingIssueOrders],
-  );
-
   const normalizedDateRange = useMemo(
     () => getNormalizedDateRange(filters.dateFrom, filters.dateTo),
     [filters.dateFrom, filters.dateTo],
@@ -1023,9 +993,7 @@ export default function Orders() {
 
   const filteredOrders = useMemo(() => {
     let result = ordersWithMeta.filter(
-      (order) =>
-        !missingOrderIdSet.has(String(order?.id || "").trim()) &&
-        !shippingIssueIdSet.has(String(order?.id || "").trim()),
+      (order) => !missingOrderIdSet.has(String(order?.id || "").trim()),
     );
 
     if (deferredSearchTerm.trim()) {
@@ -1152,17 +1120,14 @@ export default function Orders() {
     missingOrderIdSet,
     normalizedDateRange,
     ordersWithMeta,
-    shippingIssueIdSet,
   ]);
 
   const selectableOrders = useMemo(
     () =>
       ordersWithMeta.filter(
-        (order) =>
-          !missingOrderIdSet.has(String(order?.id || "").trim()) &&
-          !shippingIssueIdSet.has(String(order?.id || "").trim()),
+        (order) => !missingOrderIdSet.has(String(order?.id || "").trim()),
       ),
-    [missingOrderIdSet, ordersWithMeta, shippingIssueIdSet],
+    [missingOrderIdSet, ordersWithMeta],
   );
 
   const selectedOrders = useMemo(
@@ -1650,42 +1615,6 @@ export default function Orders() {
                   )}
                 </button>
               ) : null}
-            </div>
-          )}
-
-          {shippingIssuesSummary.total > 0 && (
-            <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3 text-violet-900">
-              <div className="flex items-start gap-2">
-                <Truck size={18} className="mt-0.5 text-violet-600" />
-                <div>
-                  <p className="font-semibold">
-                    {select(
-                      `${formatNumber(shippingIssuesSummary.total, { maximumFractionDigits: 0 })} أوردر متحول لقائمة مشاكل الشحن`,
-                      `${formatNumber(shippingIssuesSummary.total, { maximumFractionDigits: 0 })} orders moved to the shipping issues list`,
-                    )}
-                  </p>
-                  <p className="text-sm text-violet-800">
-                    {select(
-                      "الأوردرات دي اتشالت من الليستة الأساسية علشان تتابع من صفحة مشاكل الشحن، وتقدر ترجّعها تاني من هناك أو من داخل الأوردر نفسه.",
-                      "These orders are removed from the main list and tracked from the Shipping Issues page until they are returned back.",
-                    )}
-                  </p>
-                  {shippingIssuesSummary.openFollowUp > 0 ? (
-                    <p className="mt-2 text-xs font-medium text-violet-900/80">
-                      {select(
-                        `لسه ${formatNumber(shippingIssuesSummary.openFollowUp, { maximumFractionDigits: 0 })} أوردر في متابعة شحن مفتوحة`,
-                        `${formatNumber(shippingIssuesSummary.openFollowUp, { maximumFractionDigits: 0 })} order(s) still have an open shipping follow-up`,
-                      )}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              <button
-                onClick={() => navigate("/orders/shipping-issues")}
-                className="px-4 py-2 rounded-lg bg-violet-700 hover:bg-violet-800 text-white text-sm font-medium"
-              >
-                {select("فتح مشاكل الشحن", "Open Shipping Issues")}
-              </button>
             </div>
           )}
 

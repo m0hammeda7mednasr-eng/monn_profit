@@ -85,7 +85,10 @@ export const isTransientSupabaseError = (error) => {
     text.includes("timed out") ||
     text.includes("timeout") ||
     text.includes("connection terminated") ||
-    text.includes("connection reset")
+    text.includes("connection reset") ||
+    text.includes("fetch failed") ||
+    text.includes("enotfound") ||
+    text.includes("econnrefused")
   );
 };
 

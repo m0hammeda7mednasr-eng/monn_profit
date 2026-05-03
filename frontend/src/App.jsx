@@ -17,13 +17,11 @@ import "./index.css";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Customers = lazy(() => import("./pages/Customers"));
 const Products = lazy(() => import("./pages/Products"));
-const Suppliers = lazy(() => import("./pages/Suppliers"));
 const ProductAnalysis = lazy(() => import("./pages/ProductAnalysis"));
 const ProductDetails = lazy(() => import("./pages/ProductDetails"));
 const BarcodeLabels = lazy(() => import("./pages/BarcodeLabels"));
 const Orders = lazy(() => import("./pages/Orders"));
 const MissingOrders = lazy(() => import("./pages/MissingOrders"));
-const ShippingIssues = lazy(() => import("./pages/ShippingIssues"));
 const OrderDetails = lazy(() => import("./pages/OrderDetails"));
 const WarehouseStock = lazy(() => import("./pages/WarehouseStock"));
 const WarehouseScanner = lazy(() => import("./pages/WarehouseScanner"));
@@ -35,10 +33,7 @@ const RequestAccess = lazy(() => import("./pages/RequestAccess"));
 const Tasks = lazy(() => import("./pages/Tasks"));
 const MyTasks = lazy(() => import("./pages/MyTasks"));
 const ActivityLog = lazy(() => import("./pages/ActivityLog"));
-const NetProfit = lazy(() => import("./pages/NetProfit"));
-const Analytics = lazy(() => import("./pages/Analytics"));
 const GrowthCenter = lazy(() => import("./pages/GrowthCenter"));
-const MetaAnalytics = lazy(() => import("./pages/MetaCommandCenter"));
 const AdminPage = lazy(() => import("./pages/Admin"));
 
 function RouteFallback() {
@@ -87,38 +82,7 @@ function App() {
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="/suppliers"
-                element={
-                  <ProtectedRoute permission="can_view_suppliers">
-                    <Suppliers />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/suppliers/:supplierId"
-                element={
-                  <ProtectedRoute permission="can_view_suppliers">
-                    <Suppliers />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/suppliers/fabric-suppliers"
-                element={
-                  <ProtectedRoute permission="can_view_suppliers">
-                    <Suppliers />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/suppliers/fabric-suppliers/:supplierId"
-                element={
-                  <ProtectedRoute permission="can_view_suppliers">
-                    <Suppliers />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/suppliers/*" element={<Navigate to="/products" replace />} />
               <Route
                 path="/products/analysis"
                 element={
@@ -185,11 +149,7 @@ function App() {
               />
               <Route
                 path="/orders/shipping-issues"
-                element={
-                  <ProtectedRoute permission="can_view_orders">
-                    <ShippingIssues />
-                  </ProtectedRoute>
-                }
+                element={<Navigate to="/orders" replace />}
               />
               <Route
                 path="/orders/:id"
@@ -263,21 +223,10 @@ function App() {
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="/net-profit"
-                element={
-                  <AdminRoute>
-                    <NetProfit />
-                  </AdminRoute>
-                }
-              />
+              <Route path="/net-profit" element={<Navigate to="/admin" replace />} />
               <Route
                 path="/meta-analytics"
-                element={
-                  <ProtectedRoute permission="can_manage_settings">
-                    <MetaAnalytics />
-                  </ProtectedRoute>
-                }
+                element={<Navigate to="/admin" replace />}
               />
               <Route
                 path="/growth-center"
@@ -287,14 +236,7 @@ function App() {
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="/analytics"
-                element={
-                  <AdminRoute>
-                    <Analytics />
-                  </AdminRoute>
-                }
-              />
+              <Route path="/analytics" element={<Navigate to="/admin" replace />} />
               <Route
                 path="/admin"
                 element={

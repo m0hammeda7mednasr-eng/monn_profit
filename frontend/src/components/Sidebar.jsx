@@ -7,12 +7,10 @@ import {
   ChevronDown,
   ClipboardList,
   Clock3,
-  DollarSign,
   FileText,
   Home,
   LogOut,
   Menu,
-  Megaphone,
   Package,
   Printer,
   Server,
@@ -20,7 +18,6 @@ import {
   Shield,
   ShoppingCart,
   TrendingUp,
-  Truck,
   UserPlus,
   Users,
   X,
@@ -64,12 +61,6 @@ const buildSharedNav = (t, select) => [
         path: "/orders/in-stock-follow-up",
         permission: "can_view_orders",
       },
-      {
-        icon: Truck,
-        label: t("sidebar.shippingIssues", "Shipping Issues"),
-        path: "/orders/shipping-issues",
-        permission: "can_view_orders",
-      },
     ],
   },
   {
@@ -87,24 +78,6 @@ const buildSharedNav = (t, select) => [
         label: t("sidebar.products", "Products"),
         path: "/products",
         permission: "can_view_products",
-      },
-      {
-        icon: Truck,
-        label: t(
-          "sidebar.suppliers",
-          select("موردو المصانع", "Factory Suppliers"),
-        ),
-        path: "/suppliers",
-        permission: "can_view_suppliers",
-      },
-      {
-        icon: Truck,
-        label: t(
-          "sidebar.fabricSuppliers",
-          select("موردو القماش", "Fabric Suppliers"),
-        ),
-        path: "/suppliers/fabric-suppliers",
-        permission: "can_view_suppliers",
       },
       {
         icon: BarChart3,
@@ -152,14 +125,6 @@ const buildSharedNav = (t, select) => [
     subtitle: t("sidebar.customersSubtitle", "Customer data and follow-up"),
     permission: "can_view_customers",
   },
-  {
-    type: "item",
-    icon: DollarSign,
-    label: t("sidebar.netProfit", "Net Profit"),
-    path: "/net-profit",
-    subtitle: t("sidebar.netProfitSubtitle", "Net profit and indicators"),
-    adminOnly: true,
-  },
 ];
 
 const buildEmployeeNav = (t) => [
@@ -182,22 +147,10 @@ const buildEmployeeNav = (t) => [
 
 const buildAdminNav = (t, select) => [
   {
-    icon: Megaphone,
-    label: t("sidebar.metaAnalytics", "Meta وتحليلات"),
-    path: "/meta-analytics",
-    permission: "can_manage_settings",
-  },
-  {
     icon: TrendingUp,
     label: select("مركز النمو", "Growth Center"),
     path: "/growth-center",
     permission: "can_manage_settings",
-  },
-  {
-    icon: BarChart3,
-    label: t("sidebar.analytics", "Analytics"),
-    path: "/analytics",
-    adminOnly: true,
   },
   {
     icon: Server,
@@ -233,7 +186,7 @@ const buildAdminNav = (t, select) => [
 
 const getAutoExpandedGroups = (pathname) => ({
   orders: pathname.startsWith("/orders"),
-  catalog: pathname.startsWith("/products") || pathname.startsWith("/suppliers"),
+  catalog: pathname.startsWith("/products"),
   inventory:
     pathname.startsWith("/warehouse") || pathname.startsWith("/barcode-labels"),
 });
@@ -247,8 +200,7 @@ const isPathActive = (pathname, itemPath) => {
         pathname === "/orders" ||
         (/^\/orders\/[^/]+$/.test(pathname) &&
           pathname !== "/orders/missing" &&
-          pathname !== "/orders/in-stock-follow-up" &&
-          pathname !== "/orders/shipping-issues")
+          pathname !== "/orders/in-stock-follow-up")
       );
     case "/products":
       return (
@@ -256,10 +208,6 @@ const isPathActive = (pathname, itemPath) => {
         (/^\/products\/[^/]+$/.test(pathname) &&
           pathname !== "/products/analysis")
       );
-    case "/suppliers":
-      return pathname === "/suppliers";
-    case "/suppliers/fabric-suppliers":
-      return pathname === "/suppliers/fabric-suppliers";
     default:
       return pathname === itemPath;
   }
