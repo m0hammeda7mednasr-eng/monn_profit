@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Package, Truck, DollarSign, TrendingUp, Trash2 } from "lucide-react";
-import Layout from "../components/Layout";
+import Sidebar from "../components/Sidebar";
 import { useLocale } from "../context/LocaleContext";
 import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
@@ -134,252 +134,260 @@ export default function BostaScanner() {
 
   if (!canViewOrders) {
     return (
-      <Layout>
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
-          <p className="text-red-800">
-            {select(
-              "ليس لديك صلاحية لعرض هذه الصفحة",
-              "You don't have permission to view this page",
-            )}
-          </p>
-        </div>
-      </Layout>
+      <div className="flex h-screen bg-slate-100">
+        <Sidebar />
+        <main className="flex-1 overflow-auto">
+          <div className="p-8">
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
+              <p className="text-red-800">
+                {select(
+                  "ليس لديك صلاحية لعرض هذه الصفحة",
+                  "You don't have permission to view this page",
+                )}
+              </p>
+            </div>
+          </div>
+        </main>
+      </div>
     );
   }
 
   return (
-    <Layout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">
-              {select("سكانر بوسطة", "Bosta Scanner")}
-            </h1>
-            <p className="mt-2 text-sm text-slate-600">
-              {select(
-                "اسكان باركود الشحنة لحساب صافي الربح الحقيقي",
-                "Scan shipment barcode to calculate real net profit",
-              )}
-            </p>
-          </div>
-          {scannedItems.length > 0 && (
-            <button
-              onClick={handleClearAll}
-              className="flex items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100"
-            >
-              <Trash2 size={16} />
-              {select("مسح الكل", "Clear All")}
-            </button>
-          )}
-        </div>
-
-        {/* Scanner Input */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <form onSubmit={handleScan} className="space-y-4">
+    <div className="flex h-screen bg-slate-100">
+      <Sidebar />
+      <main className="flex-1 overflow-auto">
+        <div className="p-8 space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                {select("رقم التتبع (Tracking Number)", "Tracking Number")}
-              </label>
-              <input
-                ref={inputRef}
-                type="text"
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                placeholder={select(
-                  "اسكان أو اكتب رقم التتبع",
-                  "Scan or type tracking number",
+              <h1 className="text-3xl font-bold text-slate-900">
+                {select("سكانر بوسطة", "Bosta Scanner")}
+              </h1>
+              <p className="mt-2 text-sm text-slate-600">
+                {select(
+                  "اسكان باركود الشحنة لحساب صافي الربح الحقيقي",
+                  "Scan shipment barcode to calculate real net profit",
                 )}
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                disabled={loading}
+              </p>
+            </div>
+            {scannedItems.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                className="flex items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100"
+              >
+                <Trash2 size={16} />
+                {select("مسح الكل", "Clear All")}
+              </button>
+            )}
+          </div>
+
+          {/* Scanner Input */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <form onSubmit={handleScan} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  {select("رقم التتبع (Tracking Number)", "Tracking Number")}
+                </label>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  placeholder={select(
+                    "اسكان أو اكتب رقم التتبع",
+                    "Scan or type tracking number",
+                  )}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                  disabled={loading}
+                />
+              </div>
+
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading || !barcode.trim()}
+                className="w-full rounded-xl bg-sky-600 px-6 py-3 font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading
+                  ? select("جاري المعالجة...", "Processing...")
+                  : select("سكان", "Scan")}
+              </button>
+            </form>
+          </div>
+
+          {/* Summary Cards */}
+          {scannedItems.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <SummaryCard
+                icon={Package}
+                label={select("عدد الشحنات", "Shipments")}
+                value={scannedItems.length}
+                color="blue"
+              />
+              <SummaryCard
+                icon={DollarSign}
+                label={select("الإيرادات", "Revenue")}
+                value={formatCurrency(totals.revenue)}
+                color="green"
+              />
+              <SummaryCard
+                icon={TrendingUp}
+                label={select("صافي الربح", "Net Profit")}
+                value={formatCurrency(totals.netProfit)}
+                color="purple"
+              />
+              <SummaryCard
+                icon={Truck}
+                label={select("تكلفة الشحن", "Shipping Cost")}
+                value={formatCurrency(totals.shipping)}
+                color="orange"
+              />
+              <SummaryCard
+                icon={TrendingUp}
+                label={select("الربح الحقيقي", "Real Net Profit")}
+                value={formatCurrency(totals.realNetProfit)}
+                color={totals.realNetProfit >= 0 ? "emerald" : "red"}
               />
             </div>
+          )}
 
-            {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || !barcode.trim()}
-              className="w-full rounded-xl bg-sky-600 px-6 py-3 font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading
-                ? select("جاري المعالجة...", "Processing...")
-                : select("سكان", "Scan")}
-            </button>
-          </form>
-        </div>
-
-        {/* Summary Cards */}
-        {scannedItems.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <SummaryCard
-              icon={Package}
-              label={select("عدد الشحنات", "Shipments")}
-              value={scannedItems.length}
-              color="blue"
-            />
-            <SummaryCard
-              icon={DollarSign}
-              label={select("الإيرادات", "Revenue")}
-              value={formatCurrency(totals.revenue)}
-              color="green"
-            />
-            <SummaryCard
-              icon={TrendingUp}
-              label={select("صافي الربح", "Net Profit")}
-              value={formatCurrency(totals.netProfit)}
-              color="purple"
-            />
-            <SummaryCard
-              icon={Truck}
-              label={select("تكلفة الشحن", "Shipping Cost")}
-              value={formatCurrency(totals.shipping)}
-              color="orange"
-            />
-            <SummaryCard
-              icon={TrendingUp}
-              label={select("الربح الحقيقي", "Real Net Profit")}
-              value={formatCurrency(totals.realNetProfit)}
-              color={totals.realNetProfit >= 0 ? "emerald" : "red"}
-            />
-          </div>
-        )}
-
-        {/* Scanned Items Table */}
-        {scannedItems.length > 0 && (
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-left">
-                      {select("رقم التتبع", "Tracking #")}
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-left">
-                      {select("الأوردر", "Order")}
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-left">
-                      {select("العميل", "Customer")}
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-right">
-                      {select("الإيرادات", "Revenue")}
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-right">
-                      {select("التكلفة", "Cost")}
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-right">
-                      {select("الشحن", "Shipping")}
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-right">
-                      {select("صافي الربح", "Net Profit")}
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-right">
-                      {select("الربح الحقيقي", "Real Profit")}
-                    </th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-center">
-                      {select("إجراءات", "Actions")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {scannedItems.map((item) => (
-                    <tr
-                      key={item.tracking_number}
-                      className="hover:bg-slate-50"
-                    >
-                      <td className="px-4 py-3 text-sm font-mono text-slate-900">
-                        {item.tracking_number}
+          {/* Scanned Items Table */}
+          {scannedItems.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-left">
+                        {select("رقم التتبع", "Tracking #")}
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-left">
+                        {select("الأوردر", "Order")}
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-left">
+                        {select("العميل", "Customer")}
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-right">
+                        {select("الإيرادات", "Revenue")}
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-right">
+                        {select("التكلفة", "Cost")}
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-right">
+                        {select("الشحن", "Shipping")}
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-right">
+                        {select("صافي الربح", "Net Profit")}
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-right">
+                        {select("الربح الحقيقي", "Real Profit")}
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-center">
+                        {select("إجراءات", "Actions")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {scannedItems.map((item) => (
+                      <tr
+                        key={item.tracking_number}
+                        className="hover:bg-slate-50"
+                      >
+                        <td className="px-4 py-3 text-sm font-mono text-slate-900">
+                          {item.tracking_number}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-900">
+                          {item.order_name}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {item.customer_name}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right font-medium text-green-700">
+                          {formatCurrency(item.revenue)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-slate-600">
+                          {formatCurrency(item.total_cost)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-orange-600">
+                          {formatCurrency(item.shipping_cost)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right font-medium text-purple-700">
+                          {formatCurrency(item.net_profit)}
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-sm text-right font-bold ${
+                            item.real_net_profit >= 0
+                              ? "text-emerald-700"
+                              : "text-red-700"
+                          }`}
+                        >
+                          {formatCurrency(item.real_net_profit)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => handleDelete(item.tracking_number)}
+                            className="text-red-600 hover:text-red-800 transition"
+                            title={select("حذف", "Delete")}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-50 border-t-2 border-slate-300">
+                    <tr className="font-bold">
+                      <td
+                        colSpan="3"
+                        className="px-4 py-3 text-sm text-slate-900"
+                      >
+                        {select("الإجمالي", "Total")}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-900">
-                        {item.order_name}
+                      <td className="px-4 py-3 text-sm text-right text-green-700">
+                        {formatCurrency(totals.revenue)}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
-                        {item.customer_name}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right font-medium text-green-700">
-                        {formatCurrency(item.revenue)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right text-slate-600">
-                        {formatCurrency(item.total_cost)}
+                      <td className="px-4 py-3 text-sm text-right text-slate-900">
+                        {formatCurrency(totals.cost)}
                       </td>
                       <td className="px-4 py-3 text-sm text-right text-orange-600">
-                        {formatCurrency(item.shipping_cost)}
+                        {formatCurrency(totals.shipping)}
                       </td>
-                      <td className="px-4 py-3 text-sm text-right font-medium text-purple-700">
-                        {formatCurrency(item.net_profit)}
+                      <td className="px-4 py-3 text-sm text-right text-purple-700">
+                        {formatCurrency(totals.netProfit)}
                       </td>
                       <td
-                        className={`px-4 py-3 text-sm text-right font-bold ${
-                          item.real_net_profit >= 0
+                        className={`px-4 py-3 text-sm text-right ${
+                          totals.realNetProfit >= 0
                             ? "text-emerald-700"
                             : "text-red-700"
                         }`}
                       >
-                        {formatCurrency(item.real_net_profit)}
+                        {formatCurrency(totals.realNetProfit)}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => handleDelete(item.tracking_number)}
-                          className="text-red-600 hover:text-red-800 transition"
-                          title={select("حذف", "Delete")}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
+                      <td></td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-slate-50 border-t-2 border-slate-300">
-                  <tr className="font-bold">
-                    <td
-                      colSpan="3"
-                      className="px-4 py-3 text-sm text-slate-900"
-                    >
-                      {select("الإجمالي", "Total")}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-green-700">
-                      {formatCurrency(totals.revenue)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-slate-900">
-                      {formatCurrency(totals.cost)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-orange-600">
-                      {formatCurrency(totals.shipping)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right text-purple-700">
-                      {formatCurrency(totals.netProfit)}
-                    </td>
-                    <td
-                      className={`px-4 py-3 text-sm text-right ${
-                        totals.realNetProfit >= 0
-                          ? "text-emerald-700"
-                          : "text-red-700"
-                      }`}
-                    >
-                      {formatCurrency(totals.realNetProfit)}
-                    </td>
-                    <td></td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </tfoot>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {scannedItems.length === 0 && (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-12 text-center">
-            <Truck size={48} className="mx-auto mb-4 text-slate-400" />
-            <p className="text-slate-600">
-              {select("لا توجد شحنات مسكانة بعد", "No shipments scanned yet")}
-            </p>
-          </div>
-        )}
-      </div>
-    </Layout>
+          {scannedItems.length === 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-12 text-center">
+              <Truck size={48} className="mx-auto mb-4 text-slate-400" />
+              <p className="text-slate-600">
+                {select("لا توجد شحنات مسكانة بعد", "No shipments scanned yet")}
+              </p>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
   );
 }
 
