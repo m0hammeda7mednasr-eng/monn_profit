@@ -483,6 +483,11 @@ export default function Settings() {
             )}
           </div>
         </div>
+
+        {/* Bosta Configuration */}
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-3xl mt-8">
+          <BostaConfiguration />
+        </div>
       </main>
     </div>
   );
