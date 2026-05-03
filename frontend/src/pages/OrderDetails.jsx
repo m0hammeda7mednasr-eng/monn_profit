@@ -979,6 +979,62 @@ export default function OrderDetails() {
                 </div>
               </div>
 
+              <div className="min-w-[210px]">
+                <label className="block text-xs text-gray-500 mb-1">
+                  Shipping Issue
+                </label>
+                <select
+                  value={shippingIssueDraftReason}
+                  onChange={(e) => setShippingIssueDraftReason(e.target.value)}
+                  disabled={!canEditOrders || updatingShippingIssue}
+                  className="app-input w-full px-4 py-2.5 text-sm disabled:opacity-50"
+                >
+                  {shippingIssueOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      shippingIssueActive
+                        ? getShippingIssueBadgeClassName(currentShippingIssueReason)
+                        : "bg-slate-100 text-slate-700 border border-slate-200"
+                    }`}
+                  >
+                    {shippingIssueActive
+                      ? getShippingIssueReasonLabel(currentShippingIssueReason, select)
+                      : "Not flagged"}
+                  </span>
+                  {canEditOrders && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleSaveShippingIssue}
+                        disabled={
+                          updatingShippingIssue ||
+                          (shippingIssueActive && !hasShippingIssueReasonChanged)
+                        }
+                        className="app-button-secondary rounded-full px-3 py-1 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {shippingIssueActive ? "Save" : "Move"}
+                      </button>
+                      {shippingIssueActive && (
+                        <button
+                          type="button"
+                          onClick={handleReturnOrderToOrders}
+                          disabled={updatingShippingIssue}
+                          className="app-button-secondary rounded-full px-3 py-1 text-xs font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Return
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
             </div>
           </div>
 
