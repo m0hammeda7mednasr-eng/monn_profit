@@ -14,7 +14,9 @@ const router = express.Router();
 // Initialize Bosta service
 let bostaService;
 try {
-  bostaService = new BostaService();
+  if (process.env.BOSTA_API_KEY) {
+    bostaService = new BostaService();
+  }
 } catch (error) {
   console.warn("Bosta service initialization failed:", error.message);
 }
@@ -26,7 +28,7 @@ const requireBostaService = (req, res, next) => {
   if (!bostaService) {
     return res.status(503).json({
       error:
-        "Bosta service is not configured. Please set BOSTA_API_KEY environment variable.",
+        "Bosta service is not configured. Please configure Bosta API Key in Settings.",
     });
   }
   next();

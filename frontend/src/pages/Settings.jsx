@@ -420,6 +420,7 @@ export default function Settings() {
                   placeholder="Shopify app Client ID"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm"
                   disabled={connected}
+                  autoComplete="username"
                 />
               </div>
 
@@ -661,6 +662,7 @@ function BostaConfiguration() {
             placeholder="Enter your Bosta API Key"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm"
             required
+            autoComplete="off"
           />
           <p className="text-xs text-gray-500 mt-1">
             Get your API key from Bosta dashboard
