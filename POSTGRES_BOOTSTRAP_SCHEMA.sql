@@ -570,7 +570,7 @@ create index if not exists idx_shopify_tokens_user_store on public.shopify_token
 create index if not exists idx_shopify_tokens_shop on public.shopify_tokens (shop);
 create unique index if not exists idx_shopify_tokens_user_shop_unique on public.shopify_tokens (user_id, shop);
 create unique index if not exists idx_products_store_shopify_unique on public.products (store_id, shopify_id) where store_id is not null and shopify_id is not null;
-create unique index if not exists idx_orders_store_shopify_unique on public.orders (store_id, shopify_id) where store_id is not null and shopify_id is not null;
+create unique index if not exists idx_orders_store_shopify_unique on public.orders (COALESCE(store_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(shopify_id, ''));
 create unique index if not exists idx_customers_store_shopify_unique on public.customers (store_id, shopify_id) where store_id is not null and shopify_id is not null;
 create index if not exists idx_products_store_updated_at on public.products (store_id, updated_at desc);
 create index if not exists idx_products_store_sku on public.products (store_id, sku);

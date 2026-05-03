@@ -516,8 +516,6 @@ function RefreshIcon({ spinning }) {
 function BostaConfiguration() {
   const [bostaConfig, setBostaConfig] = useState({
     apiKey: "",
-    businessLocationId: "",
-    apiBaseUrl: "https://app.bosta.co/api/v2",
   });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -534,8 +532,6 @@ function BostaConfiguration() {
       if (data.hasConfig) {
         setBostaConfig({
           apiKey: data.apiKey || "",
-          businessLocationId: data.businessLocationId || "",
-          apiBaseUrl: data.apiBaseUrl || "https://app.bosta.co/api/v2",
         });
         setHasConfig(true);
       }
@@ -563,8 +559,6 @@ function BostaConfiguration() {
 
       await api.post("/bosta/config", {
         apiKey: bostaConfig.apiKey,
-        businessLocationId: bostaConfig.businessLocationId,
-        apiBaseUrl: bostaConfig.apiBaseUrl,
       });
 
       setHasConfig(true);
@@ -667,37 +661,6 @@ function BostaConfiguration() {
           <p className="text-xs text-gray-500 mt-1">
             Get your API key from Bosta dashboard
           </p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Business Location ID (Optional)
-          </label>
-          <input
-            type="text"
-            name="businessLocationId"
-            value={bostaConfig.businessLocationId}
-            onChange={handleChange}
-            placeholder="Default pickup location ID"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Your default pickup location for shipments
-          </p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            API Base URL
-          </label>
-          <input
-            type="text"
-            name="apiBaseUrl"
-            value={bostaConfig.apiBaseUrl}
-            onChange={handleChange}
-            placeholder="https://app.bosta.co/api/v2"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm"
-          />
         </div>
 
         <div className="flex gap-3">

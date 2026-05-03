@@ -58,8 +58,6 @@ class BostaService {
     }
     this.apiKey = normalizedApiKey;
     this.baseUrl = normalizeBaseUrl(baseUrl);
-    this.defaultBusinessLocationId =
-      process.env.BOSTA_BUSINESS_LOCATION_ID || "";
   }
 
   /**
@@ -135,8 +133,6 @@ class BostaService {
       },
       dropOffAddress: orderData.dropOffAddress,
       pickupAddress: orderData.pickupAddress,
-      businessLocationId:
-        orderData.businessLocationId || this.defaultBusinessLocationId,
       cod: orderData.cod || 0,
       businessReference: orderData.businessReference,
       goodsInfo: orderData.goodsInfo,
@@ -253,7 +249,6 @@ class BostaService {
    */
   convertShopifyOrderToBosta(shopifyOrder, options = {}) {
     const {
-      businessLocationId,
       packageType = BOSTA_PACKAGE_TYPES.SMALL,
       allowOpenPackage = false,
       flexShip = false,
@@ -311,7 +306,6 @@ class BostaService {
         ? BOSTA_ORDER_TYPES.CASH_COLLECTION
         : BOSTA_ORDER_TYPES.DELIVER,
       dropOffAddress,
-      businessLocationId,
       cod: codAmount,
       businessReference: shopifyOrder.order_number || shopifyOrder.id,
       description: description.substring(0, 200), // Bosta limit
@@ -384,8 +378,6 @@ class BostaService {
       cod_amount: orderData.cod || 0,
       expected_shipping_cost: options.expectedShippingCost || 0,
       business_reference: orderData.businessReference,
-      business_location_id:
-        orderData.businessLocationId || DEFAULT_BUSINESS_LOCATION_ID,
       delivery_state: 0, // PENDING
       delivery_state_label: "Pending",
       delivery_address: orderData.dropOffAddress,

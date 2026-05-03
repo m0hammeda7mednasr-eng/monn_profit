@@ -28,7 +28,6 @@ const BostaShipping = ({ order, onOrderUpdate, language = "ar" }) => {
     packageType: suggestPackageType(order),
     allowOpenPackage: false,
     flexShip: false,
-    businessLocationId: "",
   });
 
   const isRTL = language === "ar";
@@ -271,7 +270,7 @@ const BostaShipping = ({ order, onOrderUpdate, language = "ar" }) => {
       ) : (
         <div className="space-y-4">
           {/* Shipping Options */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 {isRTL ? "نوع الطرد" : "Package Type"}
@@ -292,24 +291,6 @@ const BostaShipping = ({ order, onOrderUpdate, language = "ar" }) => {
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {isRTL ? "معرف الموقع" : "Business Location ID"}
-              </label>
-              <input
-                type="text"
-                value={shippingOptions.businessLocationId}
-                onChange={(e) =>
-                  setShippingOptions((prev) => ({
-                    ...prev,
-                    businessLocationId: e.target.value,
-                  }))
-                }
-                placeholder={isRTL ? "اختياري" : "Optional"}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-              />
             </div>
           </div>
 

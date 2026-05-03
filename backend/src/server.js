@@ -70,7 +70,8 @@ const corsOptions = {
       return;
     }
 
-    callback(new Error(`CORS origin blocked: ${normalizeCorsOrigin(origin)}`));
+    // Return false instead of throwing error to avoid crashing OPTIONS requests
+    callback(null, false);
   },
   credentials: true,
   exposedHeaders: ["X-Request-Id", "X-Response-Time", "Server-Timing"],
@@ -78,7 +79,6 @@ const corsOptions = {
 
 // Middleware
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
 app.use(requestProfilingMiddleware);
 app.use(
   "/api/shopify/webhooks",

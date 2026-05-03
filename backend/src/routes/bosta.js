@@ -52,9 +52,6 @@ router.get("/config", authenticateToken, async (req, res) => {
     const config = {
       hasConfig,
       apiKey: hasConfig ? "********" : "",
-      businessLocationId: process.env.BOSTA_BUSINESS_LOCATION_ID || "",
-      apiBaseUrl:
-        process.env.BOSTA_API_BASE_URL || "https://app.bosta.co/api/v2",
     };
     res.json(config);
   } catch (error) {
@@ -76,7 +73,7 @@ router.post(
   requirePermission("can_manage_settings"),
   async (req, res) => {
     try {
-      const { apiKey, businessLocationId, apiBaseUrl } = req.body;
+      const { apiKey } = req.body;
       const submittedApiKey = String(apiKey || "").trim();
       const existingApiKey = String(process.env.BOSTA_API_KEY || "").trim();
       const nextApiKey =
@@ -90,16 +87,11 @@ router.post(
         });
       }
 
-      // In a real app, you'd save this to a secure config store
-      // For now, we'll just validate it works
-      const normalizedApiBaseUrl =
-        apiBaseUrl || "https://app.bosta.co/api/v2";
+      // Test the API key by fetching cities
       const testService = new BostaService({
         apiKey: nextApiKey,
-        baseUrl: normalizedApiBaseUrl,
       });
 
-      // Test the API key by fetching cities
       await testService.getCities();
 
       try {
@@ -110,8 +102,7 @@ router.post(
           entity_type: "settings",
           entity_id: "bosta",
           details: {
-            hasBusinessLocationId: Boolean(businessLocationId),
-            apiBaseUrl: normalizedApiBaseUrl,
+            configured: true,
           },
         });
       } catch (logError) {
@@ -119,15 +110,11 @@ router.post(
       }
 
       process.env.BOSTA_API_KEY = nextApiKey;
-      process.env.BOSTA_BUSINESS_LOCATION_ID = businessLocationId || "";
-      process.env.BOSTA_API_BASE_URL = normalizedApiBaseUrl;
       bostaService = testService;
-      bostaService.defaultBusinessLocationId = businessLocationId || "";
 
       res.json({
         success: true,
-        message:
-          "Bosta configuration validated and activated successfully.",
+        message: "Bosta configuration validated and activated successfully.",
       });
     } catch (error) {
       console.error("Failed to save Bosta config:", error);
@@ -459,8 +446,7 @@ router.post(
   async (req, res) => {
     try {
       const { orderId } = req.params;
-      const { businessLocationId, packageType, allowOpenPackage, flexShip } =
-        req.body;
+      const { packageType, allowOpenPackage, flexShip } = req.body;
 
       const db = supabase;
 
@@ -485,7 +471,6 @@ router.post(
       const bostaOrderData = bostaService.convertShopifyOrderToBosta(
         orderData,
         {
-          businessLocationId,
           packageType,
           allowOpenPackage,
           flexShip,
