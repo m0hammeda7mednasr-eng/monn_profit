@@ -15,25 +15,13 @@ import AdminRoute from "./components/AdminRoute";
 import "./index.css";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Customers = lazy(() => import("./pages/Customers"));
 const Products = lazy(() => import("./pages/Products"));
 const ProductAnalysis = lazy(() => import("./pages/ProductAnalysis"));
 const ProductDetails = lazy(() => import("./pages/ProductDetails"));
-const BarcodeLabels = lazy(() => import("./pages/BarcodeLabels"));
 const Orders = lazy(() => import("./pages/Orders"));
-const MissingOrders = lazy(() => import("./pages/MissingOrders"));
 const OrderDetails = lazy(() => import("./pages/OrderDetails"));
-const WarehouseStock = lazy(() => import("./pages/WarehouseStock"));
-const WarehouseScanner = lazy(() => import("./pages/WarehouseScanner"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Users = lazy(() => import("./pages/Users"));
-const Reports = lazy(() => import("./pages/Reports"));
-const MyReports = lazy(() => import("./pages/MyReports"));
-const RequestAccess = lazy(() => import("./pages/RequestAccess"));
-const Tasks = lazy(() => import("./pages/Tasks"));
-const MyTasks = lazy(() => import("./pages/MyTasks"));
-const ActivityLog = lazy(() => import("./pages/ActivityLog"));
-const GrowthCenter = lazy(() => import("./pages/GrowthCenter"));
 const AdminPage = lazy(() => import("./pages/Admin"));
 
 function RouteFallback() {
@@ -67,14 +55,6 @@ function App() {
                 }
               />
               <Route
-                path="/customers"
-                element={
-                  <ProtectedRoute permission="can_view_customers">
-                    <Customers />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="/products"
                 element={
                   <ProtectedRoute permission="can_view_products">
@@ -82,7 +62,10 @@ function App() {
                   </ProtectedRoute>
                 }
               />
-              <Route path="/suppliers/*" element={<Navigate to="/products" replace />} />
+              <Route
+                path="/suppliers/*"
+                element={<Navigate to="/products" replace />}
+              />
               <Route
                 path="/products/analysis"
                 element={
@@ -100,56 +83,12 @@ function App() {
                 }
               />
               <Route
-                path="/barcode-labels"
-                element={
-                  <ProtectedRoute permission="can_print_barcode_labels">
-                    <BarcodeLabels />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/warehouse"
-                element={
-                  <ProtectedRoute permission="can_view_warehouse">
-                    <WarehouseStock />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/warehouse/scanner"
-                element={
-                  <ProtectedRoute permission="can_edit_warehouse">
-                    <WarehouseScanner />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="/orders"
                 element={
                   <ProtectedRoute permission="can_view_orders">
                     <Orders />
                   </ProtectedRoute>
                 }
-              />
-              <Route
-                path="/orders/missing"
-                element={
-                  <ProtectedRoute permission="can_view_orders">
-                    <MissingOrders />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/orders/in-stock-follow-up"
-                element={
-                  <ProtectedRoute permission="can_view_orders">
-                    <MissingOrders />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/orders/shipping-issues"
-                element={<Navigate to="/orders" replace />}
               />
               <Route
                 path="/orders/:id"
@@ -176,68 +115,6 @@ function App() {
                 }
               />
               <Route
-                path="/reports"
-                element={
-                  <ProtectedRoute permission="can_view_all_reports">
-                    <Reports />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/my-reports"
-                element={
-                  <ProtectedRoute>
-                    <MyReports />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/request-access"
-                element={
-                  <ProtectedRoute>
-                    <RequestAccess />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/tasks"
-                element={
-                  <ProtectedRoute permission="can_manage_tasks">
-                    <Tasks />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/my-tasks"
-                element={
-                  <ProtectedRoute>
-                    <MyTasks />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/activity-log"
-                element={
-                  <ProtectedRoute permission="can_view_activity_log">
-                    <ActivityLog />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/net-profit" element={<Navigate to="/admin" replace />} />
-              <Route
-                path="/meta-analytics"
-                element={<Navigate to="/admin" replace />}
-              />
-              <Route
-                path="/growth-center"
-                element={
-                  <ProtectedRoute permission="can_manage_settings">
-                    <GrowthCenter />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/analytics" element={<Navigate to="/admin" replace />} />
-              <Route
                 path="/admin"
                 element={
                   <AdminRoute>
@@ -246,6 +123,69 @@ function App() {
                 }
               />
               <Route path="/" element={<Navigate to="/dashboard" />} />
+
+              {/* Redirect old routes to main pages */}
+              <Route
+                path="/customers"
+                element={<Navigate to="/dashboard" replace />}
+              />
+              <Route
+                path="/barcode-labels"
+                element={<Navigate to="/products" replace />}
+              />
+              <Route
+                path="/warehouse/*"
+                element={<Navigate to="/products" replace />}
+              />
+              <Route
+                path="/orders/missing"
+                element={<Navigate to="/orders" replace />}
+              />
+              <Route
+                path="/orders/in-stock-follow-up"
+                element={<Navigate to="/orders" replace />}
+              />
+              <Route
+                path="/orders/shipping-issues"
+                element={<Navigate to="/orders" replace />}
+              />
+              <Route
+                path="/reports"
+                element={<Navigate to="/admin" replace />}
+              />
+              <Route
+                path="/my-reports"
+                element={<Navigate to="/dashboard" replace />}
+              />
+              <Route
+                path="/request-access"
+                element={<Navigate to="/dashboard" replace />}
+              />
+              <Route path="/tasks" element={<Navigate to="/admin" replace />} />
+              <Route
+                path="/my-tasks"
+                element={<Navigate to="/dashboard" replace />}
+              />
+              <Route
+                path="/activity-log"
+                element={<Navigate to="/admin" replace />}
+              />
+              <Route
+                path="/growth-center"
+                element={<Navigate to="/admin" replace />}
+              />
+              <Route
+                path="/net-profit"
+                element={<Navigate to="/admin" replace />}
+              />
+              <Route
+                path="/meta-analytics"
+                element={<Navigate to="/admin" replace />}
+              />
+              <Route
+                path="/analytics"
+                element={<Navigate to="/admin" replace />}
+              />
             </Routes>
           </Suspense>
         </Router>

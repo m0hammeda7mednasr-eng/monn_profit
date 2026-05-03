@@ -1,25 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  Activity,
-  AlertTriangle,
   BarChart3,
   ChevronDown,
-  ClipboardList,
-  Clock3,
-  FileText,
   Home,
   LogOut,
   Menu,
   Package,
-  Printer,
   Server,
   Settings,
   Shield,
   ShoppingCart,
-  TrendingUp,
-  UserPlus,
-  Users,
   X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -37,31 +28,12 @@ const buildSharedNav = (t, select) => [
     subtitle: t("sidebar.dashboardSubtitle", "Quick view of daily performance"),
   },
   {
-    type: "group",
-    id: "orders",
+    type: "item",
     icon: ShoppingCart,
-    label: t("sidebar.ordersSection", "Orders & Follow-up"),
-    subtitle: t("sidebar.ordersSectionSubtitle", "Active orders and alerts"),
-    items: [
-      {
-        icon: ShoppingCart,
-        label: t("sidebar.orders", "Orders"),
-        path: "/orders",
-        permission: "can_view_orders",
-      },
-      {
-        icon: AlertTriangle,
-        label: t("sidebar.missingOrders", "Out-of-Stock Orders"),
-        path: "/orders/missing",
-        permission: "can_view_orders",
-      },
-      {
-        icon: Clock3,
-        label: t("sidebar.inStockFollowUp", "In-Stock Follow-Up"),
-        path: "/orders/in-stock-follow-up",
-        permission: "can_view_orders",
-      },
-    ],
+    label: t("sidebar.orders", "Orders"),
+    path: "/orders",
+    subtitle: t("sidebar.ordersSubtitle", "Manage all orders"),
+    permission: "can_view_orders",
   },
   {
     type: "group",
@@ -87,71 +59,9 @@ const buildSharedNav = (t, select) => [
       },
     ],
   },
-  {
-    type: "group",
-    id: "inventory",
-    icon: Server,
-    label: t("sidebar.inventorySection", "Inventory & Movement"),
-    subtitle: t(
-      "sidebar.inventorySectionSubtitle",
-      "Warehouse, scanner, and movements",
-    ),
-    items: [
-      {
-        icon: Printer,
-        label: select("الباركود والطباعة", "Barcode Labels"),
-        path: "/barcode-labels",
-        permission: "can_print_barcode_labels",
-      },
-      {
-        icon: Server,
-        label: t("sidebar.warehouse", "Warehouse"),
-        path: "/warehouse",
-        permission: "can_view_warehouse",
-      },
-      {
-        icon: Activity,
-        label: t("sidebar.scanner", "Scanner"),
-        path: "/warehouse/scanner",
-        permission: "can_edit_warehouse",
-      },
-    ],
-  },
-  {
-    type: "item",
-    icon: Users,
-    label: t("sidebar.customers", "Customers"),
-    path: "/customers",
-    subtitle: t("sidebar.customersSubtitle", "Customer data and follow-up"),
-    permission: "can_view_customers",
-  },
-];
-
-const buildEmployeeNav = (t) => [
-  {
-    icon: ClipboardList,
-    label: t("sidebar.myTasks", "My Tasks"),
-    path: "/my-tasks",
-  },
-  {
-    icon: FileText,
-    label: t("sidebar.myReports", "My Reports"),
-    path: "/my-reports",
-  },
-  {
-    icon: UserPlus,
-    label: t("sidebar.accessRequests", "Access Requests"),
-    path: "/request-access",
-  },
 ];
 
 const buildAdminNav = (t, select) => [
-  {
-    icon: TrendingUp,
-    label: select("مركز النمو", "Growth Center"),
-    path: "/growth-center",
-    permission: "can_manage_settings",
-  },
   {
     icon: Server,
     label: t("sidebar.adminPanel", "Admin Panel"),
@@ -159,36 +69,15 @@ const buildAdminNav = (t, select) => [
     adminOnly: true,
   },
   {
-    icon: ClipboardList,
-    label: t("sidebar.taskManagement", "Task Management"),
-    path: "/tasks",
-    permission: "can_manage_tasks",
-  },
-  {
-    icon: FileText,
-    label: t("sidebar.employeeReports", "Employee Reports"),
-    path: "/reports",
-    permission: "can_view_all_reports",
-  },
-  {
     icon: Shield,
     label: t("sidebar.userManagement", "User Management"),
     path: "/users",
     permission: "can_manage_users",
   },
-  {
-    icon: Activity,
-    label: t("sidebar.activityLog", "Activity Log"),
-    path: "/activity-log",
-    permission: "can_view_activity_log",
-  },
 ];
 
 const getAutoExpandedGroups = (pathname) => ({
-  orders: pathname.startsWith("/orders"),
   catalog: pathname.startsWith("/products"),
-  inventory:
-    pathname.startsWith("/warehouse") || pathname.startsWith("/barcode-labels"),
 });
 
 const isPathActive = (pathname, itemPath) => {
@@ -225,7 +114,6 @@ export default function Sidebar() {
   const location = useLocation();
 
   const sharedNav = useMemo(() => buildSharedNav(t, select), [select, t]);
-  const employeeNav = useMemo(() => buildEmployeeNav(t), [t]);
   const adminNav = useMemo(() => buildAdminNav(t, select), [select, t]);
 
   useEffect(() => {
@@ -273,11 +161,6 @@ export default function Sidebar() {
     [canSeeItem, sharedNav],
   );
 
-  const visibleEmployeeItems = useMemo(
-    () => (isAdmin ? [] : employeeNav.filter(canSeeItem)),
-    [canSeeItem, employeeNav, isAdmin],
-  );
-
   const visibleAdminItems = useMemo(
     () => adminNav.filter(canSeeItem),
     [adminNav, canSeeItem],
@@ -319,15 +202,15 @@ export default function Sidebar() {
       );
     }
 
-      return (
-        <SidebarPrimaryItem
-          key={entry.path}
-          item={entry}
-          isActive={isPathActive(location.pathname, entry.path)}
-          onClick={handleItemClick}
-          isRTL={isRTL}
-        />
-      );
+    return (
+      <SidebarPrimaryItem
+        key={entry.path}
+        item={entry}
+        isActive={isPathActive(location.pathname, entry.path)}
+        onClick={handleItemClick}
+        isRTL={isRTL}
+      />
+    );
   };
 
   const mobileButtonPosition = isRTL ? "right-4" : "left-4";
@@ -352,9 +235,13 @@ export default function Sidebar() {
         } lg:translate-x-0 w-72 border-r border-slate-800/80 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white transition-transform duration-300 z-40 flex flex-col overflow-visible shadow-[0_30px_70px_-42px_rgba(15,23,42,0.95)]`}
       >
         <div className="relative z-40 border-b border-slate-800/90 bg-slate-950/72 p-6 backdrop-blur-xl shrink-0">
-          <div className={`flex items-center justify-between gap-3 ${logoRowClass}`}>
+          <div
+            className={`flex items-center justify-between gap-3 ${logoRowClass}`}
+          >
             <div className={`${headerTextAlignClass} min-w-0`}>
-              <h1 className="text-xl font-semibold tracking-[0.01em] text-white">Moon Profit</h1>
+              <h1 className="text-xl font-semibold tracking-[0.01em] text-white">
+                Moon Profit
+              </h1>
               <p className="mt-1 truncate text-sm text-slate-300">
                 {user?.name || t("sidebar.userFallback", "User")}
               </p>
@@ -380,27 +267,17 @@ export default function Sidebar() {
             )}
           </div>
 
-          <div className={`mt-4 flex ${isRTL ? "justify-end" : "justify-start"}`}>
+          <div
+            className={`mt-4 flex ${isRTL ? "justify-end" : "justify-start"}`}
+          >
             <LanguageToggle className="border-slate-700 bg-slate-900/70 text-white shadow-none" />
           </div>
         </div>
 
         <nav className="mt-2 flex-1 overflow-y-auto px-3 pb-5 space-y-4">
-          <div className="space-y-2">{visibleSharedEntries.map(renderNavEntry)}</div>
-
-          {visibleEmployeeItems.length > 0 && (
-            <NavSection title={t("sidebar.mySection", "My Work")} isRTL={isRTL}>
-              {visibleEmployeeItems.map((item) => (
-                <SidebarListItem
-                  key={item.path}
-                  item={item}
-                  isActive={isPathActive(location.pathname, item.path)}
-                  onClick={handleItemClick}
-                  isRTL={isRTL}
-                />
-              ))}
-            </NavSection>
-          )}
+          <div className="space-y-2">
+            {visibleSharedEntries.map(renderNavEntry)}
+          </div>
 
           {visibleAdminItems.length > 0 && (
             <NavSection
@@ -486,7 +363,9 @@ function SidebarPrimaryItem({ item, isActive, onClick, isRTL }) {
       </div>
       <span
         className={`h-2.5 w-2.5 rounded-full transition ${
-          isActive ? "bg-sky-300 shadow-[0_0_18px_rgba(125,211,252,0.8)]" : "bg-transparent"
+          isActive
+            ? "bg-sky-300 shadow-[0_0_18px_rgba(125,211,252,0.8)]"
+            : "bg-transparent"
         }`}
       />
     </Link>
