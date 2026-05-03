@@ -42,28 +42,44 @@ export default function BostaScanner() {
       const response = await api.get(`/bosta/shipments/${barcode.trim()}`);
       const shipment = response.data;
 
-      if (!shipment || !shipment.order_id) {
+      if (!shipment) {
         setError(select("الشحنة غير موجودة", "Shipment not found"));
         setLoading(false);
         return;
       }
 
-      // Get order details to calculate net profit
-      const orderResponse = await api.get(
-        `/shopify/orders/${shipment.order_id}/details`,
-      );
-      const order = orderResponse.data;
+      let order = null;
+      let totalCost = 0;
+      let revenue = 0;
+      let orderName = select("غير معروف", "Unknown");
+      let customerName = select("غير معروف", "Unknown");
 
-      // Calculate costs
-      const totalCost =
-        order.line_items?.reduce((sum, item) => {
-          const cost = parseFloat(item.cost_price || 0);
-          const quantity = parseInt(item.quantity || 0);
-          return sum + cost * quantity;
-        }, 0) || 0;
+      // Try to get order details if order_id exists
+      if (shipment.order_id) {
+        try {
+          const orderResponse = await api.get(
+            `/shopify/orders/${shipment.order_id}/details`,
+          );
+          order = orderResponse.data;
+
+          // Calculate costs
+          totalCost =
+            order.line_items?.reduce((sum, item) => {
+              const cost = parseFloat(item.cost_price || 0);
+              const quantity = parseInt(item.quantity || 0);
+              return sum + cost * quantity;
+            }, 0) || 0;
+
+          revenue = parseFloat(order.total_price || 0);
+          orderName = order.name || order.order_number || shipment.order_id;
+          customerName = order.customer?.name || select("غير معروف", "Unknown");
+        } catch (orderError) {
+          console.warn("Could not fetch order details:", orderError);
+          // Continue without order details
+        }
+      }
 
       const shippingCost = parseFloat(shipment.expected_shipping_cost || 0);
-      const revenue = parseFloat(order.total_price || 0);
       const netProfit = revenue - totalCost;
       const realNetProfit = netProfit - shippingCost;
 
@@ -75,13 +91,15 @@ export default function BostaScanner() {
       const newItem = {
         tracking_number: barcode.trim(),
         order_id: shipment.order_id,
-        order_name: order.name,
-        customer_name: order.customer?.name || select("غير معروف", "Unknown"),
+        order_name: orderName,
+        customer_name: customerName,
         revenue,
         total_cost: totalCost,
         shipping_cost: shippingCost,
         net_profit: netProfit,
         real_net_profit: realNetProfit,
+        delivery_state: shipment.delivery_state,
+        delivery_state_label: shipment.delivery_state_label,
         scanned_at: new Date().toISOString(),
       };
 
@@ -269,6 +287,9 @@ export default function BostaScanner() {
                         {select("رقم التتبع", "Tracking #")}
                       </th>
                       <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-left">
+                        {select("الحالة", "Status")}
+                      </th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-left">
                         {select("الأوردر", "Order")}
                       </th>
                       <th className="px-4 py-3 text-xs font-semibold text-slate-700 text-left">
@@ -302,6 +323,24 @@ export default function BostaScanner() {
                       >
                         <td className="px-4 py-3 text-sm font-mono text-slate-900">
                           {item.tracking_number}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              item.delivery_state === 40
+                                ? "bg-green-100 text-green-800"
+                                : item.delivery_state === 30
+                                  ? "bg-blue-100 text-blue-800"
+                                  : item.delivery_state === 47
+                                    ? "bg-red-100 text-red-800"
+                                    : item.delivery_state === 50
+                                      ? "bg-gray-100 text-gray-800"
+                                      : "bg-yellow-100 text-yellow-800"
+                            }`}
+                          >
+                            {item.delivery_state_label ||
+                              select("غير معروف", "Unknown")}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-900">
                           {item.order_name}
@@ -345,7 +384,7 @@ export default function BostaScanner() {
                   <tfoot className="bg-slate-50 border-t-2 border-slate-300">
                     <tr className="font-bold">
                       <td
-                        colSpan="3"
+                        colSpan="4"
                         className="px-4 py-3 text-sm text-slate-900"
                       >
                         {select("الإجمالي", "Total")}

@@ -325,7 +325,7 @@ router.get(
 
 /**
  * GET /api/bosta/shipments/:trackingNumber
- * Get shipment from database (includes expected_shipping_cost)
+ * Get shipment from database or fetch from Bosta API
  */
 router.get(
   "/shipments/:trackingNumber",
@@ -336,26 +336,56 @@ router.get(
       const { trackingNumber } = req.params;
 
       const db = supabase;
+
+      // First, try to get from database
       const { data: shipment, error } = await db
         .from("bosta_shipments")
         .select("*")
         .eq("tracking_number", trackingNumber)
         .single();
 
-      if (error) {
-        if (error.code === "PGRST116") {
-          return res.status(404).json({
-            error: "Shipment not found",
-          });
-        }
-        throw error;
+      if (shipment && !error) {
+        return res.json(shipment);
       }
 
-      res.json(shipment);
+      // If not found in database, try to fetch from Bosta API
+      if (!bostaService) {
+        return res.status(404).json({
+          error:
+            "Shipment not found in database and Bosta service not configured",
+        });
+      }
+
+      try {
+        const bostaDelivery =
+          await bostaService.getDeliveryStatus(trackingNumber);
+
+        // Return the Bosta API response with expected format
+        const formattedShipment = {
+          tracking_number: trackingNumber,
+          delivery_id: bostaDelivery._id,
+          order_id: null, // Will be null if not in our database
+          bosta_order_type: bostaDelivery.type,
+          delivery_state: bostaDelivery.state,
+          delivery_state_label: bostaService.getStateLabel(bostaDelivery.state),
+          expected_shipping_cost: 0, // Default to 0 if not in database
+          cod_amount: bostaDelivery.cod || 0,
+          is_delivered: bostaDelivery.state === 40,
+          bosta_response: bostaDelivery,
+        };
+
+        return res.json(formattedShipment);
+      } catch (bostaError) {
+        console.error("Failed to fetch from Bosta API:", bostaError);
+        return res.status(404).json({
+          error: "Shipment not found in database or Bosta API",
+          message: bostaError.message,
+        });
+      }
     } catch (error) {
       console.error("Failed to get shipment:", error);
       res.status(500).json({
-        error: "Failed to get shipment from database",
+        error: "Failed to get shipment",
         message: error.message,
       });
     }
