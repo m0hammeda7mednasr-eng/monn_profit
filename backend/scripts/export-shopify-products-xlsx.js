@@ -15,34 +15,37 @@ dotenv.config({ path: path.join(backendDir, ".env") });
 dotenv.config({ path: path.join(repoRoot, ".env") });
 
 const DEFAULT_API_VERSION = "2026-04";
-const MAX_CELL_LENGTH = 32760;
+const MAX_CELL_LENGTH = 32767;
 const REQUEST_TIMEOUT_MS = 30000;
 const MAX_RETRIES = 5;
 
 const parseArgs = (argv = []) =>
-  argv.reduce((result, arg) => {
-    if (arg === "--help" || arg === "-h") {
-      result.help = true;
+  argv.reduce(
+    (result, arg) => {
+      if (arg === "--help" || arg === "-h") {
+        result.help = true;
+        return result;
+      }
+
+      if (arg === "--no-json") {
+        result.writeJson = false;
+        return result;
+      }
+
+      if (arg === "--include-metafields") {
+        result.includeMetafields = true;
+        return result;
+      }
+
+      const match = arg.match(/^--([^=]+)=(.*)$/);
+      if (match) {
+        result[match[1]] = match[2];
+      }
+
       return result;
-    }
-
-    if (arg === "--no-json") {
-      result.writeJson = false;
-      return result;
-    }
-
-    if (arg === "--include-metafields") {
-      result.includeMetafields = true;
-      return result;
-    }
-
-    const match = arg.match(/^--([^=]+)=(.*)$/);
-    if (match) {
-      result[match[1]] = match[2];
-    }
-
-    return result;
-  }, { writeJson: true, includeMetafields: false });
+    },
+    { writeJson: true, includeMetafields: false },
+  );
 
 const showHelp = () => {
   console.log(`
@@ -75,7 +78,9 @@ Env fallbacks:
 };
 
 const normalizeShopDomain = (value) => {
-  let raw = String(value || "").trim().toLowerCase();
+  let raw = String(value || "")
+    .trim()
+    .toLowerCase();
   if (!raw) return "";
 
   raw = raw.replace(/^https?:\/\//, "").replace(/^www\./, "");
@@ -163,7 +168,9 @@ const fetchShopifyPage = async ({ url, accessToken }) => {
         throw requestError;
       }
 
-      const retryAfterMs = parseRetryAfterMs(error.response?.headers?.["retry-after"]);
+      const retryAfterMs = parseRetryAfterMs(
+        error.response?.headers?.["retry-after"],
+      );
       const fallbackDelayMs = Math.min(30000, 1000 * 2 ** (attempt - 1));
       await sleep(retryAfterMs || fallbackDelayMs);
     }
@@ -181,7 +188,9 @@ const fetchAllPages = async ({ initialUrl, accessToken, label }) => {
     page += 1;
     const result = await fetchShopifyPage({ url: nextUrl, accessToken });
     items.push(...result.items);
-    console.log(`[${label}] page=${page} fetched=${result.items.length} total=${items.length}`);
+    console.log(
+      `[${label}] page=${page} fetched=${result.items.length} total=${items.length}`,
+    );
     nextUrl = result.nextPageUrl;
   }
 
@@ -203,7 +212,11 @@ const createSupabaseClient = () => {
   });
 };
 
-const resolveDatabaseCredentialCandidates = async ({ shop, storeId, userId }) => {
+const resolveDatabaseCredentialCandidates = async ({
+  shop,
+  storeId,
+  userId,
+}) => {
   const supabase = createSupabaseClient();
   if (!supabase) {
     return [];
@@ -270,9 +283,11 @@ const resolveCredentialCandidates = async ({ args }) => {
     .trim()
     .toLowerCase();
   const storeId =
-    args["store-id"] || envValue("SHOPIFY_EXPORT_STORE_ID", "SHOPIFY_BOOTSTRAP_STORE_ID");
+    args["store-id"] ||
+    envValue("SHOPIFY_EXPORT_STORE_ID", "SHOPIFY_BOOTSTRAP_STORE_ID");
   const userId =
-    args["user-id"] || envValue("SHOPIFY_EXPORT_USER_ID", "SHOPIFY_BOOTSTRAP_USER_ID");
+    args["user-id"] ||
+    envValue("SHOPIFY_EXPORT_USER_ID", "SHOPIFY_BOOTSTRAP_USER_ID");
   const candidates = [];
 
   if (tokenSource !== "database" && requestedShop && envAccessToken) {
@@ -309,9 +324,20 @@ const truncateCell = (value) => {
 
   const text =
     typeof value === "string" ? value : JSON.stringify(value, null, 2);
+
+  // Excel has a strict limit of 32,767 characters per cell
   if (text.length <= MAX_CELL_LENGTH) return text;
 
-  return `${text.slice(0, MAX_CELL_LENGTH - 80)}... [truncated ${text.length - MAX_CELL_LENGTH} chars]`;
+  // Log when truncation occurs for debugging
+  console.warn(
+    `Truncating cell content: ${text.length} chars -> ${MAX_CELL_LENGTH} chars`,
+  );
+
+  // Leave more room for the truncation message
+  const truncateLength = MAX_CELL_LENGTH - 100;
+  const truncatedChars = text.length - truncateLength;
+
+  return `${text.slice(0, truncateLength)}... [TRUNCATED: ${truncatedChars} chars removed]`;
 };
 
 const asText = (value) =>
@@ -380,7 +406,10 @@ const productRows = (products) =>
       published_at: asText(product.published_at),
       variants_count: variants.length,
       images_count: images.length,
-      options: options.map((option) => option?.name).filter(Boolean).join(", "),
+      options: options
+        .map((option) => option?.name)
+        .filter(Boolean)
+        .join(", "),
       first_variant_id: asText(firstVariant.id),
       first_sku: asText(firstVariant.sku),
       min_price: prices.length > 0 ? Math.min(...prices) : "",
@@ -415,7 +444,9 @@ const variantRows = (products) =>
       taxable: variant.taxable === undefined ? "" : Boolean(variant.taxable),
       tax_code: asText(variant.tax_code),
       requires_shipping:
-        variant.requires_shipping === undefined ? "" : Boolean(variant.requires_shipping),
+        variant.requires_shipping === undefined
+          ? ""
+          : Boolean(variant.requires_shipping),
       grams: asNumber(variant.grams),
       weight: asNumber(variant.weight),
       weight_unit: asText(variant.weight_unit),
@@ -456,7 +487,12 @@ const imageRows = (products) =>
     })),
   );
 
-const fetchProductMetafields = async ({ products, shop, apiVersion, accessToken }) => {
+const fetchProductMetafields = async ({
+  products,
+  shop,
+  apiVersion,
+  accessToken,
+}) => {
   const rows = [];
 
   for (let index = 0; index < products.length; index += 1) {
@@ -494,7 +530,10 @@ const fetchProductMetafields = async ({ products, shop, apiVersion, accessToken 
 };
 
 const addSheet = (workbook, name, rows, headers) => {
-  const finalRows = rows.length > 0 ? rows : [Object.fromEntries(headers.map((key) => [key, ""]))];
+  const finalRows =
+    rows.length > 0
+      ? rows
+      : [Object.fromEntries(headers.map((key) => [key, ""]))];
   const sheet = XLSX.utils.json_to_sheet(finalRows, { header: headers });
   sheet["!cols"] = headers.map((header) => ({
     wch: Math.min(Math.max(header.length + 2, 14), 42),
@@ -680,7 +719,9 @@ const main = async () => {
 
   for (const candidate of credentialCandidates) {
     try {
-      console.log(`Trying Shopify token source=${candidate.source}, shop=${candidate.shop}`);
+      console.log(
+        `Trying Shopify token source=${candidate.source}, shop=${candidate.shop}`,
+      );
       products = await fetchAllPages({
         label: "products",
         accessToken: candidate.accessToken,
@@ -730,7 +771,20 @@ const main = async () => {
     shop: activeCredential.shop,
     apiVersion,
   });
-  XLSX.writeFile(workbook, workbookPath, { compression: true });
+  try {
+    XLSX.writeFile(workbook, workbookPath, { compression: true });
+  } catch (error) {
+    if (error.message && error.message.includes("32767")) {
+      console.error(
+        "Excel cell length limit exceeded. Some product data was truncated.",
+      );
+      console.error(
+        "This usually happens with very long product descriptions or HTML content.",
+      );
+      console.error("The export will continue with truncated data.");
+    }
+    throw error;
+  }
 
   if (args.writeJson) {
     await fs.mkdir(path.dirname(jsonPath), { recursive: true });
