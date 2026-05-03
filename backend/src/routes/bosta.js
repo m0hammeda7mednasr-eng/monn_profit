@@ -324,6 +324,43 @@ router.get(
 );
 
 /**
+ * GET /api/bosta/shipments
+ * Get all shipments from database (for testing)
+ */
+router.get(
+  "/shipments",
+  authenticateToken,
+  requirePermission("can_view_orders"),
+  async (req, res) => {
+    try {
+      const db = supabase;
+      const { data: shipments, error } = await db
+        .from("bosta_shipments")
+        .select(
+          "tracking_number, order_id, delivery_state, delivery_state_label, created_at",
+        )
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (error) {
+        throw error;
+      }
+
+      res.json({
+        count: shipments?.length || 0,
+        shipments: shipments || [],
+      });
+    } catch (error) {
+      console.error("Failed to get shipments:", error);
+      res.status(500).json({
+        error: "Failed to get shipments",
+        message: error.message,
+      });
+    }
+  },
+);
+
+/**
  * GET /api/bosta/shipments/:trackingNumber
  * Get shipment from database or fetch from Bosta API
  */
@@ -377,8 +414,23 @@ router.get(
         return res.json(formattedShipment);
       } catch (bostaError) {
         console.error("Failed to fetch from Bosta API:", bostaError);
-        return res.status(404).json({
-          error: "Shipment not found in database or Bosta API",
+
+        // Check if it's a 404 or invalid tracking number
+        const errorMessage = bostaError.message || "";
+        if (
+          errorMessage.includes("404") ||
+          errorMessage.includes("not valid JSON") ||
+          errorMessage.includes("<!DOCTYPE")
+        ) {
+          return res.status(404).json({
+            error: "Tracking number not found",
+            message:
+              "This tracking number does not exist in Bosta system. Please check the number and try again.",
+          });
+        }
+
+        return res.status(500).json({
+          error: "Failed to fetch shipment from Bosta API",
           message: bostaError.message,
         });
       }

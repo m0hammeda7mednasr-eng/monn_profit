@@ -119,8 +119,9 @@ export default function BostaScanner() {
       }
     } catch (err) {
       console.error("Error scanning barcode:", err);
+      const errorMsg = err.response?.data?.message || err.response?.data?.error;
       setError(
-        err.response?.data?.error ||
+        errorMsg ||
           select("فشل في جلب بيانات الشحنة", "Failed to fetch shipment data"),
       );
     } finally {
