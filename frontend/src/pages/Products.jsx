@@ -11,6 +11,7 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
+  Download,
   Edit2,
   Eye,
   Package,
@@ -159,6 +160,7 @@ export default function Products() {
   const [, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [error, setError] = useState("");
+  const [exporting, setExporting] = useState(false);
   const [barcodeModalTargets, setBarcodeModalTargets] = useState([]);
   const [barcodeModalTargetKey, setBarcodeModalTargetKey] = useState("");
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
@@ -667,6 +669,45 @@ export default function Products() {
     return null;
   };
 
+  const handleExportProducts = useCallback(async () => {
+    setExporting(true);
+    try {
+      const response = await fetch("/api/products/export", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Export failed");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `products-export-${new Date().toISOString().split("T")[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      showNotification(
+        select("تم تصدير المنتجات بنجاح", "Products exported successfully"),
+        "success",
+      );
+    } catch (error) {
+      console.error("Export error:", error);
+      showNotification(
+        select("فشل تصدير المنتجات", "Failed to export products"),
+        "error",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [select, showNotification]);
+
   const openProductWorkspace = useCallback((productId, mode = "view") => {
     if (!productId) {
       return;
@@ -743,7 +784,10 @@ export default function Products() {
           <div className="flex flex-wrap justify-between items-center gap-3">
             <div>
               <h1 className="text-3xl font-bold text-slate-900">
-                {select("\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a", "Products")}
+                {select(
+                  "\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a",
+                  "Products",
+                )}
               </h1>
               <p className="text-slate-600">
                 {select(
@@ -753,17 +797,33 @@ export default function Products() {
               </p>
               {lastUpdatedAt && (
                 <p className="mt-2 text-xs text-slate-500">
-                  {select("\u0622\u062e\u0631 \u062a\u062d\u062f\u064a\u062b", "Last refresh")}: {formatDateTime(lastUpdatedAt)}
+                  {select(
+                    "\u0622\u062e\u0631 \u062a\u062d\u062f\u064a\u062b",
+                    "Last refresh",
+                  )}
+                  : {formatDateTime(lastUpdatedAt)}
                 </p>
               )}
             </div>
-            <button
+            <div className="flex gap-2">
+              <button
+                onClick={handleExportProducts}
+                disabled={exporting}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+              >
+                <Download size={18} />
+                {exporting
+                  ? select("جاري التصدير...", "Exporting...")
+                  : select("تصدير Excel", "Export Excel")}
+              </button>
+              <button
                 onClick={() => fetchProducts({ force: true })}
-              className="bg-sky-700 hover:bg-sky-800 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-            >
-              <RefreshCw size={18} />
-              {select("\u062a\u062d\u062f\u064a\u062b", "Refresh")}
-            </button>
+                className="bg-sky-700 hover:bg-sky-800 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+              >
+                <RefreshCw size={18} />
+                {select("تحديث", "Refresh")}
+              </button>
+            </div>
           </div>
 
           {(error || notification?.type === "error") && (
@@ -811,14 +871,20 @@ export default function Products() {
                 onClick={() => handleFilterChange("stockStatus", "low_stock")}
                 className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
               >
-                {select("\u0631\u0643\u0632 \u0639\u0644\u0649 \u0627\u0644\u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u0645\u0646\u062e\u0641\u0636", "Focus low stock")}
+                {select(
+                  "\u0631\u0643\u0632 \u0639\u0644\u0649 \u0627\u0644\u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u0645\u0646\u062e\u0641\u0636",
+                  "Focus low stock",
+                )}
               </button>
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
             <SummaryCard
-              label={select("\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a", "Products")}
+              label={select(
+                "\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a",
+                "Products",
+              )}
               value={formatNumber(summary.uniqueProducts, {
                 maximumFractionDigits: 0,
               })}
@@ -826,7 +892,10 @@ export default function Products() {
               color="from-sky-500 to-sky-700"
             />
             <SummaryCard
-              label={select("\u0627\u0644\u0641\u0627\u0631\u064a\u0627\u0646\u062a\u0627\u062a", "Variants")}
+              label={select(
+                "\u0627\u0644\u0641\u0627\u0631\u064a\u0627\u0646\u062a\u0627\u062a",
+                "Variants",
+              )}
               value={formatNumber(summary.totalVariants, {
                 maximumFractionDigits: 0,
               })}
@@ -834,7 +903,10 @@ export default function Products() {
               color="from-indigo-500 to-indigo-700"
             />
             <SummaryCard
-              label={select("\u0625\u062c\u0645\u0627\u0644\u064a \u0645\u062e\u0632\u0648\u0646 Shopify", "Total Shopify Stock")}
+              label={select(
+                "\u0625\u062c\u0645\u0627\u0644\u064a \u0645\u062e\u0632\u0648\u0646 Shopify",
+                "Total Shopify Stock",
+              )}
               value={formatNumber(summary.totalInventory, {
                 maximumFractionDigits: 0,
               })}
@@ -842,7 +914,10 @@ export default function Products() {
               color="from-emerald-500 to-emerald-700"
             />
             <SummaryCard
-              label={select("Shopify \u0645\u0646\u062e\u0641\u0636", "Low Shopify Stock")}
+              label={select(
+                "Shopify \u0645\u0646\u062e\u0641\u0636",
+                "Low Shopify Stock",
+              )}
               value={formatNumber(summary.lowStock, {
                 maximumFractionDigits: 0,
               })}
@@ -1224,8 +1299,12 @@ export default function Products() {
                     )}
                     <StockBadge
                       stockState={variant._meta.actualStockState}
-                      shopifyInventoryQuantity={variant.shopify_inventory_quantity}
-                      warehouseInventoryQuantity={variant.warehouse_inventory_quantity}
+                      shopifyInventoryQuantity={
+                        variant.shopify_inventory_quantity
+                      }
+                      warehouseInventoryQuantity={
+                        variant.warehouse_inventory_quantity
+                      }
                     />
                   </div>
 
@@ -1261,9 +1340,12 @@ export default function Products() {
                       />
                       <DetailItem
                         label="Shopify"
-                        value={formatNumber(variant.shopify_inventory_quantity, {
-                          maximumFractionDigits: 0,
-                        })}
+                        value={formatNumber(
+                          variant.shopify_inventory_quantity,
+                          {
+                            maximumFractionDigits: 0,
+                          },
+                        )}
                         valueClassName={
                           variant._meta.actualStockState === "in_stock"
                             ? "text-emerald-600"
@@ -1274,9 +1356,12 @@ export default function Products() {
                       />
                       <DetailItem
                         label="Warehouse"
-                        value={formatNumber(variant.warehouse_inventory_quantity, {
-                          maximumFractionDigits: 0,
-                        })}
+                        value={formatNumber(
+                          variant.warehouse_inventory_quantity,
+                          {
+                            maximumFractionDigits: 0,
+                          },
+                        )}
                         valueClassName={
                           toNumber(variant.warehouse_inventory_quantity) > 0
                             ? "text-emerald-600"
@@ -1293,7 +1378,8 @@ export default function Products() {
                     {toNumber(variant.shopify_inventory_quantity) !==
                     toNumber(variant.warehouse_inventory_quantity) ? (
                       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                        Shopify stock and warehouse stock are different for this variant.
+                        Shopify stock and warehouse stock are different for this
+                        variant.
                       </div>
                     ) : null}
 
@@ -1464,7 +1550,11 @@ function VariantImage({ variant }) {
   );
 }
 
-function StockBadge({ stockState, shopifyInventoryQuantity = 0, warehouseInventoryQuantity = 0 }) {
+function StockBadge({
+  stockState,
+  shopifyInventoryQuantity = 0,
+  warehouseInventoryQuantity = 0,
+}) {
   const hasWarehouseStockOnly =
     toNumber(shopifyInventoryQuantity) <= 0 &&
     toNumber(warehouseInventoryQuantity) > 0;

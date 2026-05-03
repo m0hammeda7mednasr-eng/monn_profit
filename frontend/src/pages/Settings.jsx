@@ -8,6 +8,7 @@ import {
   Link as LinkIcon,
   Save,
   Store,
+  Truck,
 } from "lucide-react";
 import { markSharedDataUpdated } from "../utils/realtime";
 
@@ -77,9 +78,9 @@ export default function Settings() {
           ? ` Initial sync completed: ${syncCounts.products} products, ${syncCounts.orders} orders, ${syncCounts.customers} customers.`
           : syncStatus === "queued"
             ? " Background sync started and will continue automatically in batches."
-          : syncStatus === "failed"
-            ? " Connection saved, but initial sync failed. Run Sync Shopify."
-            : "";
+            : syncStatus === "failed"
+              ? " Connection saved, but initial sync failed. Run Sync Shopify."
+              : "";
 
       setMessage({
         type: syncStatus === "failed" ? "info" : "success",
@@ -196,7 +197,8 @@ export default function Settings() {
     } catch (error) {
       setMessage({
         type: "error",
-        text: error.response?.data?.error || "Failed to start Shopify connection.",
+        text:
+          error.response?.data?.error || "Failed to start Shopify connection.",
       });
       setLoading(false);
     }
@@ -286,7 +288,9 @@ export default function Settings() {
       <main className="flex-1 overflow-auto p-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-800">Settings</h1>
-          <p className="text-gray-600">Manage Shopify connection and synchronization</p>
+          <p className="text-gray-600">
+            Manage Shopify connection and synchronization
+          </p>
         </div>
 
         {message.text && (
@@ -331,7 +335,9 @@ export default function Settings() {
           <div className="bg-green-50 border-l-4 border-green-500 rounded-r-lg p-4 mb-6 flex items-center gap-3">
             <CheckCircle className="text-green-600" size={24} />
             <div>
-              <p className="text-green-800 font-semibold">Connected to {shopifyConfig.shop}</p>
+              <p className="text-green-800 font-semibold">
+                Connected to {shopifyConfig.shop}
+              </p>
               <p className="text-green-700 text-sm">
                 Store is ready for data synchronization.
               </p>
@@ -368,9 +374,12 @@ export default function Settings() {
           <div className="flex items-center gap-3 mb-6">
             <Store className="text-green-600" size={32} />
             <div>
-              <h2 className="text-2xl font-bold text-gray-800">Shopify Connection</h2>
+              <h2 className="text-2xl font-bold text-gray-800">
+                Shopify Connection
+              </h2>
               <p className="text-gray-600 text-sm">
-                Configure app credentials, connect store, and sync products/orders/customers.
+                Configure app credentials, connect store, and sync
+                products/orders/customers.
               </p>
             </div>
           </div>
@@ -385,12 +394,18 @@ export default function Settings() {
                   {shopifyConfig.redirectUri}
                 </code>
                 <button onClick={copyToClipboard} title="Copy URI">
-                  <Copy size={14} className="cursor-pointer hover:text-green-600" />
+                  <Copy
+                    size={14}
+                    className="cursor-pointer hover:text-green-600"
+                  />
                 </button>
               </div>
             </div>
 
-            <form onSubmit={handleSaveCredentials} className="space-y-4 pt-4 border-t">
+            <form
+              onSubmit={handleSaveCredentials}
+              className="space-y-4 pt-4 border-t"
+            >
               <h3 className="font-semibold text-lg">Credentials</h3>
 
               <div>
@@ -436,7 +451,10 @@ export default function Settings() {
             </form>
 
             {!connected && (
-              <form onSubmit={handleConnect} className="space-y-4 pt-4 border-t">
+              <form
+                onSubmit={handleConnect}
+                className="space-y-4 pt-4 border-t"
+              >
                 <h3 className="font-semibold text-lg">Connect Store</h3>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -465,7 +483,6 @@ export default function Settings() {
             )}
           </div>
         </div>
-
       </main>
     </div>
   );
@@ -487,5 +504,217 @@ function RefreshIcon({ spinning }) {
     >
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
     </svg>
+  );
+}
+
+function BostaConfiguration() {
+  const [bostaConfig, setBostaConfig] = useState({
+    apiKey: "",
+    businessLocationId: "",
+    apiBaseUrl: "https://app.bosta.co/api/v2",
+  });
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [message, setMessage] = useState({ type: "", text: "" });
+  const [hasConfig, setHasConfig] = useState(false);
+
+  useEffect(() => {
+    loadBostaConfig();
+  }, []);
+
+  const loadBostaConfig = async () => {
+    try {
+      const { data } = await api.get("/api/bosta/config");
+      if (data.hasConfig) {
+        setBostaConfig({
+          apiKey: data.apiKey || "",
+          businessLocationId: data.businessLocationId || "",
+          apiBaseUrl: data.apiBaseUrl || "https://app.bosta.co/api/v2",
+        });
+        setHasConfig(true);
+      }
+    } catch (error) {
+      console.error("Failed to load Bosta config:", error);
+    }
+  };
+
+  const handleChange = (e) => {
+    setBostaConfig({
+      ...bostaConfig,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage({ type: "", text: "" });
+
+    try {
+      if (!bostaConfig.apiKey) {
+        throw new Error("Bosta API Key is required");
+      }
+
+      await api.post("/api/bosta/config", {
+        apiKey: bostaConfig.apiKey,
+        businessLocationId: bostaConfig.businessLocationId,
+        apiBaseUrl: bostaConfig.apiBaseUrl,
+      });
+
+      setHasConfig(true);
+      setMessage({
+        type: "success",
+        text: "Bosta configuration saved successfully!",
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error.response?.data?.error || error.message,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setMessage({ type: "", text: "" });
+
+    try {
+      const { data } = await api.get("/api/bosta/cities");
+      setMessage({
+        type: "success",
+        text: `Bosta API connection successful! Found ${data.length || 0} cities.`,
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error.response?.data?.error || "Failed to connect to Bosta API",
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-6">
+        <Truck className="text-orange-600" size={32} />
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Bosta Shipping</h2>
+          <p className="text-gray-600 text-sm">
+            Configure Bosta API for shipping integration
+          </p>
+        </div>
+      </div>
+
+      {message.text && (
+        <div
+          className={`border rounded-lg p-4 mb-6 flex items-center gap-3 ${
+            message.type === "error"
+              ? "bg-red-50 border-red-200"
+              : "bg-green-50 border-green-200"
+          }`}
+        >
+          {message.type === "success" ? (
+            <CheckCircle className="text-green-600" size={20} />
+          ) : (
+            <AlertCircle className="text-red-600" size={20} />
+          )}
+          <p
+            className={`font-medium ${
+              message.type === "error" ? "text-red-800" : "text-green-800"
+            }`}
+          >
+            {message.text}
+          </p>
+        </div>
+      )}
+
+      {hasConfig && (
+        <div className="bg-green-50 border-l-4 border-green-500 rounded-r-lg p-4 mb-6 flex items-center gap-3">
+          <CheckCircle className="text-green-600" size={24} />
+          <div>
+            <p className="text-green-800 font-semibold">Bosta API Configured</p>
+            <p className="text-green-700 text-sm">
+              Ready to create shipments and track deliveries
+            </p>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Bosta API Key *
+          </label>
+          <input
+            type="password"
+            name="apiKey"
+            value={bostaConfig.apiKey}
+            onChange={handleChange}
+            placeholder="Enter your Bosta API Key"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+            required
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Get your API key from Bosta dashboard
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Business Location ID (Optional)
+          </label>
+          <input
+            type="text"
+            name="businessLocationId"
+            value={bostaConfig.businessLocationId}
+            onChange={handleChange}
+            placeholder="Default pickup location ID"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Your default pickup location for shipments
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            API Base URL
+          </label>
+          <input
+            type="text"
+            name="apiBaseUrl"
+            value={bostaConfig.apiBaseUrl}
+            onChange={handleChange}
+            placeholder="https://app.bosta.co/api/v2"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            <Save size={18} />
+            {saving ? "Saving..." : "Save Configuration"}
+          </button>
+
+          {hasConfig && (
+            <button
+              type="button"
+              onClick={handleTest}
+              disabled={testing}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg disabled:opacity-50"
+            >
+              {testing ? "Testing..." : "Test Connection"}
+            </button>
+          )}
+        </div>
+      </form>
+    </div>
   );
 }

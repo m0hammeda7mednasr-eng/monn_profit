@@ -24,6 +24,7 @@ import productAnalysisRoutes from "./routes/productAnalysis.js";
 import suppliersRoutes from "./routes/suppliers.js";
 import metaAnalyticsRoutes from "./routes/metaAnalytics.js";
 import bostaRoutes from "./routes/bosta.js";
+import productsExportRoutes from "./routes/productsExport.js";
 import { supabase } from "./supabaseClient.js";
 import { setRlsContext } from "./middleware/rls.js";
 import { emitRealtimeEvent } from "./services/realtimeEventService.js";
@@ -156,6 +157,7 @@ app.use("/api/product-analysis", productAnalysisRoutes);
 app.use("/api/suppliers", suppliersRoutes);
 app.use("/api/meta-analytics", metaAnalyticsRoutes);
 app.use("/api/bosta", bostaRoutes);
+app.use("/api/products", productsExportRoutes);
 
 // Health Check
 app.get("/api/health", (req, res) => {

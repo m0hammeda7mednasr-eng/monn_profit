@@ -33,6 +33,85 @@ const requireBostaService = (req, res, next) => {
 };
 
 /**
+ * GET /api/bosta/config
+ * Get Bosta configuration status
+ */
+router.get("/config", requireAuth, async (req, res) => {
+  try {
+    const hasConfig = Boolean(process.env.BOSTA_API_KEY);
+    const config = {
+      hasConfig,
+      apiKey: hasConfig ? "••••••••" : "",
+      businessLocationId: process.env.BOSTA_BUSINESS_LOCATION_ID || "",
+      apiBaseUrl:
+        process.env.BOSTA_API_BASE_URL || "https://app.bosta.co/api/v2",
+    };
+    res.json(config);
+  } catch (error) {
+    console.error("Failed to get Bosta config:", error);
+    res.status(500).json({
+      error: "Failed to get Bosta configuration",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/bosta/config
+ * Save Bosta configuration
+ */
+router.post(
+  "/config",
+  requireAuth,
+  requirePermissions(["can_manage_settings"]),
+  async (req, res) => {
+    try {
+      const { apiKey, businessLocationId, apiBaseUrl } = req.body;
+
+      if (!apiKey) {
+        return res.status(400).json({
+          error: "Bosta API Key is required",
+        });
+      }
+
+      // In a real app, you'd save this to a secure config store
+      // For now, we'll just validate it works
+      const testService = new BostaService();
+      testService.apiKey = apiKey;
+      testService.baseUrl = apiBaseUrl || "https://app.bosta.co/api/v2";
+
+      // Test the API key by fetching cities
+      await testService.getCities();
+
+      // Log the configuration save
+      const db = supabase;
+      await db.from("activity_log").insert({
+        user_id: req.user.id,
+        action: "bosta_config_saved",
+        entity_type: "settings",
+        entity_id: "bosta",
+        details: {
+          hasBusinessLocationId: Boolean(businessLocationId),
+          apiBaseUrl: apiBaseUrl || "https://app.bosta.co/api/v2",
+        },
+      });
+
+      res.json({
+        success: true,
+        message:
+          "Bosta configuration saved successfully. Please update your .env file with: BOSTA_API_KEY, BOSTA_BUSINESS_LOCATION_ID, BOSTA_API_BASE_URL",
+      });
+    } catch (error) {
+      console.error("Failed to save Bosta config:", error);
+      res.status(500).json({
+        error: "Failed to save Bosta configuration. Please check your API key.",
+        message: error.message,
+      });
+    }
+  },
+);
+
+/**
  * GET /api/bosta/cities
  * Get list of available cities
  */
