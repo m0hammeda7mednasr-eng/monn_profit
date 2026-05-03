@@ -39,7 +39,7 @@ export default function BostaScanner() {
 
     try {
       // Get shipment details from Bosta
-      const response = await api.get(`/api/bosta/shipments/${barcode.trim()}`);
+      const response = await api.get(`/bosta/shipments/${barcode.trim()}`);
       const shipment = response.data;
 
       if (!shipment || !shipment.order_id) {
@@ -49,7 +49,9 @@ export default function BostaScanner() {
       }
 
       // Get order details to calculate net profit
-      const orderResponse = await api.get(`/api/orders/${shipment.order_id}`);
+      const orderResponse = await api.get(
+        `/shopify/orders/${shipment.order_id}/details`,
+      );
       const order = orderResponse.data;
 
       // Calculate costs

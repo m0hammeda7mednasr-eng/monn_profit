@@ -6,10 +6,17 @@
 
 import { supabase } from "../supabaseClient.js";
 
-const BOSTA_API_BASE_URL =
-  process.env.BOSTA_API_BASE_URL || "https://app.bosta.co/api/v2";
-const BOSTA_API_KEY = process.env.BOSTA_API_KEY;
-const DEFAULT_BUSINESS_LOCATION_ID = process.env.BOSTA_BUSINESS_LOCATION_ID;
+const DEFAULT_BOSTA_API_BASE_URL = "https://app.bosta.co/api/v2";
+
+const normalizeBaseUrl = (value) =>
+  String(value || DEFAULT_BOSTA_API_BASE_URL)
+    .trim()
+    .replace(/\/+$/, "");
+
+const parsePositiveInteger = (value, fallback) => {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
 
 // Order Types & Codes from Bosta documentation
 export const BOSTA_ORDER_TYPES = {
@@ -41,12 +48,18 @@ export const BOSTA_DELIVERY_STATES = {
 };
 
 class BostaService {
-  constructor() {
-    if (!BOSTA_API_KEY) {
+  constructor({
+    apiKey = process.env.BOSTA_API_KEY,
+    baseUrl = process.env.BOSTA_API_BASE_URL,
+  } = {}) {
+    const normalizedApiKey = String(apiKey || "").trim();
+    if (!normalizedApiKey) {
       throw new Error("BOSTA_API_KEY environment variable is required");
     }
-    this.apiKey = BOSTA_API_KEY;
-    this.baseUrl = BOSTA_API_BASE_URL;
+    this.apiKey = normalizedApiKey;
+    this.baseUrl = normalizeBaseUrl(baseUrl);
+    this.defaultBusinessLocationId =
+      process.env.BOSTA_BUSINESS_LOCATION_ID || "";
   }
 
   /**
@@ -54,16 +67,27 @@ class BostaService {
    */
   async makeRequest(endpoint, options = {}) {
     const url = `${this.baseUrl}${endpoint}`;
+    const timeoutMs = parsePositiveInteger(
+      options.timeoutMs || process.env.BOSTA_API_TIMEOUT_MS,
+      20000,
+    );
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const fetchOptions = { ...options };
+    const signal = fetchOptions.signal;
+    delete fetchOptions.timeoutMs;
+    delete fetchOptions.signal;
     const headers = {
       Authorization: this.apiKey,
       "Content-Type": "application/json",
-      ...options.headers,
+      ...fetchOptions.headers,
     };
 
     try {
       const response = await fetch(url, {
-        ...options,
+        ...fetchOptions,
         headers,
+        signal: signal || controller.signal,
       });
 
       const data = await response.json();
@@ -76,12 +100,21 @@ class BostaService {
 
       return data;
     } catch (error) {
+      const message =
+        error.name === "AbortError"
+          ? `Bosta API request timed out after ${timeoutMs}ms`
+          : error.message;
       console.error("Bosta API Request Failed:", {
         endpoint,
-        error: error.message,
+        error: message,
         url,
       });
+      if (error.name === "AbortError") {
+        throw new Error(message);
+      }
       throw error;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -102,7 +135,8 @@ class BostaService {
       },
       dropOffAddress: orderData.dropOffAddress,
       pickupAddress: orderData.pickupAddress,
-      businessLocationId: orderData.businessLocationId,
+      businessLocationId:
+        orderData.businessLocationId || this.defaultBusinessLocationId,
       cod: orderData.cod || 0,
       businessReference: orderData.businessReference,
       goodsInfo: orderData.goodsInfo,

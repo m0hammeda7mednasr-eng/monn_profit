@@ -3,6 +3,8 @@
  * Frontend helpers for Bosta shipping integration
  */
 
+import api from "./api";
+
 // Bosta order types
 export const BOSTA_ORDER_TYPES = {
   DELIVER: 10,
@@ -259,123 +261,60 @@ export const generateOrderDescription = (order) => {
  * Get cities from Bosta API
  */
 export const fetchBostaCities = async () => {
-  const response = await fetch("/api/bosta/cities", {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch cities");
-  }
-
-  return response.json();
+  const response = await api.get("/bosta/cities");
+  return response.data;
 };
 
 /**
  * Get zones for a city
  */
 export const fetchBostaZones = async (cityId) => {
-  const response = await fetch(`/api/bosta/cities/${cityId}/zones`, {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch zones");
-  }
-
-  return response.json();
+  const response = await api.get(`/bosta/cities/${cityId}/zones`);
+  return response.data;
 };
 
 /**
  * Get districts for a zone
  */
 export const fetchBostaDistricts = async (zoneId) => {
-  const response = await fetch(`/api/bosta/zones/${zoneId}/districts`, {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch districts");
-  }
-
-  return response.json();
+  const response = await api.get(`/bosta/zones/${zoneId}/districts`);
+  return response.data;
 };
 
 /**
  * Get pricing for delivery
  */
 export const fetchBostaPricing = async (pricingData) => {
-  const response = await fetch("/api/bosta/pricing", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify(pricingData),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to get pricing");
-  }
-
-  return response.json();
+  const response = await api.post("/bosta/pricing", pricingData);
+  return response.data;
 };
 
 /**
  * Ship order with Bosta
  */
 export const shipOrderWithBosta = async (orderId, shippingOptions) => {
-  const response = await fetch(`/api/bosta/orders/${orderId}/ship`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify(shippingOptions),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || "Failed to ship order");
-  }
-
-  return response.json();
+  const response = await api.post(
+    `/bosta/orders/${orderId}/ship`,
+    shippingOptions,
+  );
+  return response.data;
 };
 
 /**
  * Get delivery status
  */
 export const fetchDeliveryStatus = async (trackingNumber) => {
-  const response = await fetch(`/api/bosta/deliveries/${trackingNumber}`, {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to get delivery status");
-  }
-
-  return response.json();
+  const response = await api.get(`/bosta/deliveries/${trackingNumber}`);
+  return response.data;
 };
 
 /**
  * Cancel delivery
  */
 export const cancelDelivery = async (trackingNumber, reason) => {
-  const response = await fetch(
-    `/api/bosta/deliveries/${trackingNumber}/cancel`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({ reason }),
-    },
+  const response = await api.post(
+    `/bosta/deliveries/${trackingNumber}/cancel`,
+    { reason },
   );
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || "Failed to cancel delivery");
-  }
-
-  return response.json();
+  return response.data;
 };

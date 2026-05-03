@@ -530,7 +530,7 @@ function BostaConfiguration() {
 
   const loadBostaConfig = async () => {
     try {
-      const { data } = await api.get("/api/bosta/config");
+      const { data } = await api.get("/bosta/config");
       if (data.hasConfig) {
         setBostaConfig({
           apiKey: data.apiKey || "",
@@ -561,7 +561,7 @@ function BostaConfiguration() {
         throw new Error("Bosta API Key is required");
       }
 
-      await api.post("/api/bosta/config", {
+      await api.post("/bosta/config", {
         apiKey: bostaConfig.apiKey,
         businessLocationId: bostaConfig.businessLocationId,
         apiBaseUrl: bostaConfig.apiBaseUrl,
@@ -587,7 +587,7 @@ function BostaConfiguration() {
     setMessage({ type: "", text: "" });
 
     try {
-      const { data } = await api.get("/api/bosta/cities");
+      const { data } = await api.get("/bosta/cities");
       setMessage({
         type: "success",
         text: `Bosta API connection successful! Found ${data.length || 0} cities.`,

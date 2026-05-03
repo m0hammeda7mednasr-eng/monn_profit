@@ -5,8 +5,8 @@
 
 import express from "express";
 import ExcelJS from "exceljs";
-import { requireAuth } from "../middleware/auth.js";
-import { requirePermissions } from "../middleware/permissions.js";
+import { authenticateToken } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { supabase } from "../supabaseClient.js";
 
 const router = express.Router();
@@ -17,8 +17,8 @@ const router = express.Router();
  */
 router.get(
   "/export",
-  requireAuth,
-  requirePermissions(["can_view_products"]),
+  authenticateToken,
+  requirePermission("can_view_products"),
   async (req, res) => {
     try {
       const db = supabase;

@@ -5,11 +5,19 @@
 
 import express from "express";
 import BostaService from "../services/bostaService.js";
-import { requireAuth } from "../middleware/auth.js";
-import { requirePermissions } from "../middleware/permissions.js";
+import { authenticateToken } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { supabase } from "../supabaseClient.js";
 
 const router = express.Router();
+
+const extractBostaList = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data?.list)) return payload.data.list;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.list)) return payload.list;
+  return payload;
+};
 
 // Initialize Bosta service
 let bostaService;
@@ -38,12 +46,12 @@ const requireBostaService = (req, res, next) => {
  * GET /api/bosta/config
  * Get Bosta configuration status
  */
-router.get("/config", requireAuth, async (req, res) => {
+router.get("/config", authenticateToken, async (req, res) => {
   try {
     const hasConfig = Boolean(process.env.BOSTA_API_KEY);
     const config = {
       hasConfig,
-      apiKey: hasConfig ? "••••••••" : "",
+      apiKey: hasConfig ? "********" : "",
       businessLocationId: process.env.BOSTA_BUSINESS_LOCATION_ID || "",
       apiBaseUrl:
         process.env.BOSTA_API_BASE_URL || "https://app.bosta.co/api/v2",
@@ -64,13 +72,19 @@ router.get("/config", requireAuth, async (req, res) => {
  */
 router.post(
   "/config",
-  requireAuth,
-  requirePermissions(["can_manage_settings"]),
+  authenticateToken,
+  requirePermission("can_manage_settings"),
   async (req, res) => {
     try {
       const { apiKey, businessLocationId, apiBaseUrl } = req.body;
+      const submittedApiKey = String(apiKey || "").trim();
+      const existingApiKey = String(process.env.BOSTA_API_KEY || "").trim();
+      const nextApiKey =
+        /^\*+$/.test(submittedApiKey) && existingApiKey
+          ? existingApiKey
+          : submittedApiKey;
 
-      if (!apiKey) {
+      if (!nextApiKey) {
         return res.status(400).json({
           error: "Bosta API Key is required",
         });
@@ -78,30 +92,42 @@ router.post(
 
       // In a real app, you'd save this to a secure config store
       // For now, we'll just validate it works
-      const testService = new BostaService();
-      testService.apiKey = apiKey;
-      testService.baseUrl = apiBaseUrl || "https://app.bosta.co/api/v2";
+      const normalizedApiBaseUrl =
+        apiBaseUrl || "https://app.bosta.co/api/v2";
+      const testService = new BostaService({
+        apiKey: nextApiKey,
+        baseUrl: normalizedApiBaseUrl,
+      });
 
       // Test the API key by fetching cities
       await testService.getCities();
 
-      // Log the configuration save
-      const db = supabase;
-      await db.from("activity_log").insert({
-        user_id: req.user.id,
-        action: "bosta_config_saved",
-        entity_type: "settings",
-        entity_id: "bosta",
-        details: {
-          hasBusinessLocationId: Boolean(businessLocationId),
-          apiBaseUrl: apiBaseUrl || "https://app.bosta.co/api/v2",
-        },
-      });
+      try {
+        const db = supabase;
+        await db.from("activity_log").insert({
+          user_id: req.user.id,
+          action: "bosta_config_saved",
+          entity_type: "settings",
+          entity_id: "bosta",
+          details: {
+            hasBusinessLocationId: Boolean(businessLocationId),
+            apiBaseUrl: normalizedApiBaseUrl,
+          },
+        });
+      } catch (logError) {
+        console.warn("Bosta config activity log skipped:", logError.message);
+      }
+
+      process.env.BOSTA_API_KEY = nextApiKey;
+      process.env.BOSTA_BUSINESS_LOCATION_ID = businessLocationId || "";
+      process.env.BOSTA_API_BASE_URL = normalizedApiBaseUrl;
+      bostaService = testService;
+      bostaService.defaultBusinessLocationId = businessLocationId || "";
 
       res.json({
         success: true,
         message:
-          "Bosta configuration saved successfully. Please update your .env file with: BOSTA_API_KEY, BOSTA_BUSINESS_LOCATION_ID, BOSTA_API_BASE_URL",
+          "Bosta configuration validated and activated successfully.",
       });
     } catch (error) {
       console.error("Failed to save Bosta config:", error);
@@ -117,18 +143,23 @@ router.post(
  * GET /api/bosta/cities
  * Get list of available cities
  */
-router.get("/cities", requireAuth, requireBostaService, async (req, res) => {
-  try {
-    const cities = await bostaService.getCities();
-    res.json(cities);
-  } catch (error) {
-    console.error("Failed to fetch cities:", error);
-    res.status(500).json({
-      error: "Failed to fetch cities from Bosta",
-      message: error.message,
-    });
-  }
-});
+router.get(
+  "/cities",
+  authenticateToken,
+  requireBostaService,
+  async (req, res) => {
+    try {
+      const cities = await bostaService.getCities();
+      res.json(extractBostaList(cities));
+    } catch (error) {
+      console.error("Failed to fetch cities:", error);
+      res.status(500).json({
+        error: "Failed to fetch cities from Bosta",
+        message: error.message,
+      });
+    }
+  },
+);
 
 /**
  * GET /api/bosta/cities/:cityId/zones
@@ -136,13 +167,13 @@ router.get("/cities", requireAuth, requireBostaService, async (req, res) => {
  */
 router.get(
   "/cities/:cityId/zones",
-  requireAuth,
+  authenticateToken,
   requireBostaService,
   async (req, res) => {
     try {
       const { cityId } = req.params;
       const zones = await bostaService.getZones(cityId);
-      res.json(zones);
+      res.json(extractBostaList(zones));
     } catch (error) {
       console.error("Failed to fetch zones:", error);
       res.status(500).json({
@@ -159,13 +190,13 @@ router.get(
  */
 router.get(
   "/zones/:zoneId/districts",
-  requireAuth,
+  authenticateToken,
   requireBostaService,
   async (req, res) => {
     try {
       const { zoneId } = req.params;
       const districts = await bostaService.getDistricts(zoneId);
-      res.json(districts);
+      res.json(extractBostaList(districts));
     } catch (error) {
       console.error("Failed to fetch districts:", error);
       res.status(500).json({
@@ -180,18 +211,23 @@ router.get(
  * POST /api/bosta/pricing
  * Get pricing for delivery
  */
-router.post("/pricing", requireAuth, requireBostaService, async (req, res) => {
-  try {
-    const pricing = await bostaService.getPricing(req.body);
-    res.json(pricing);
-  } catch (error) {
-    console.error("Failed to get pricing:", error);
-    res.status(500).json({
-      error: "Failed to get pricing from Bosta",
-      message: error.message,
-    });
-  }
-});
+router.post(
+  "/pricing",
+  authenticateToken,
+  requireBostaService,
+  async (req, res) => {
+    try {
+      const pricing = await bostaService.getPricing(req.body);
+      res.json(pricing);
+    } catch (error) {
+      console.error("Failed to get pricing:", error);
+      res.status(500).json({
+        error: "Failed to get pricing from Bosta",
+        message: error.message,
+      });
+    }
+  },
+);
 
 /**
  * POST /api/bosta/deliveries
@@ -199,8 +235,8 @@ router.post("/pricing", requireAuth, requireBostaService, async (req, res) => {
  */
 router.post(
   "/deliveries",
-  requireAuth,
-  requirePermissions(["can_edit_orders"]),
+  authenticateToken,
+  requirePermission("can_edit_orders"),
   requireBostaService,
   async (req, res) => {
     try {
@@ -236,8 +272,8 @@ router.post(
  */
 router.post(
   "/deliveries/bulk",
-  requireAuth,
-  requirePermissions(["can_edit_orders"]),
+  authenticateToken,
+  requirePermission("can_edit_orders"),
   requireBostaService,
   async (req, res) => {
     try {
@@ -282,8 +318,8 @@ router.post(
  */
 router.get(
   "/deliveries/:trackingNumber",
-  requireAuth,
-  requirePermissions(["can_view_orders"]),
+  authenticateToken,
+  requirePermission("can_view_orders"),
   requireBostaService,
   async (req, res) => {
     try {
@@ -306,8 +342,8 @@ router.get(
  */
 router.get(
   "/shipments/:trackingNumber",
-  requireAuth,
-  requirePermissions(["can_view_orders"]),
+  authenticateToken,
+  requirePermission("can_view_orders"),
   async (req, res) => {
     try {
       const { trackingNumber } = req.params;
@@ -345,8 +381,8 @@ router.get(
  */
 router.post(
   "/deliveries/:trackingNumber/cancel",
-  requireAuth,
-  requirePermissions(["can_edit_orders"]),
+  authenticateToken,
+  requirePermission("can_edit_orders"),
   requireBostaService,
   async (req, res) => {
     try {
@@ -383,8 +419,8 @@ router.post(
  */
 router.post(
   "/pickup-requests",
-  requireAuth,
-  requirePermissions(["can_edit_orders"]),
+  authenticateToken,
+  requirePermission("can_edit_orders"),
   requireBostaService,
   async (req, res) => {
     try {
@@ -417,8 +453,8 @@ router.post(
  */
 router.post(
   "/orders/:orderId/ship",
-  requireAuth,
-  requirePermissions(["can_edit_orders"]),
+  authenticateToken,
+  requirePermission("can_edit_orders"),
   requireBostaService,
   async (req, res) => {
     try {
