@@ -324,6 +324,51 @@ router.get(
 );
 
 /**
+ * GET /api/bosta/demo-shipment
+ * Get a demo shipment for testing the scanner
+ */
+router.get("/demo-shipment", authenticateToken, async (req, res) => {
+  try {
+    // Return a demo shipment for testing
+    const demoShipment = {
+      tracking_number: "DEMO123456789",
+      delivery_id: "demo_delivery_001",
+      order_id: null,
+      bosta_order_type: 10,
+      delivery_state: 40, // Delivered
+      delivery_state_label: "Delivered",
+      expected_shipping_cost: 50,
+      cod_amount: 500,
+      is_delivered: true,
+      package_type: "SMALL",
+      created_at: new Date().toISOString(),
+      bosta_response: {
+        _id: "demo_delivery_001",
+        trackingNumber: "DEMO123456789",
+        state: 40,
+        type: 10,
+        cod: 500,
+      },
+    };
+
+    res.json({
+      message: "This is a demo shipment for testing the scanner",
+      shipment: demoShipment,
+      instructions: {
+        en: "Use tracking number 'DEMO123456789' in the scanner to test",
+        ar: "استخدم رقم التتبع 'DEMO123456789' في السكانر للاختبار",
+      },
+    });
+  } catch (error) {
+    console.error("Failed to generate demo shipment:", error);
+    res.status(500).json({
+      error: "Failed to generate demo shipment",
+      message: error.message,
+    });
+  }
+});
+
+/**
  * GET /api/bosta/shipments
  * Get all shipments from database (for testing)
  */
@@ -371,6 +416,23 @@ router.get(
   async (req, res) => {
     try {
       const { trackingNumber } = req.params;
+
+      // Handle demo tracking number for testing
+      if (trackingNumber.toUpperCase().startsWith("DEMO")) {
+        const demoShipment = {
+          tracking_number: trackingNumber,
+          delivery_id: "demo_delivery_001",
+          order_id: null,
+          bosta_order_type: 10,
+          delivery_state: 40,
+          delivery_state_label: "Delivered",
+          expected_shipping_cost: 50,
+          cod_amount: 500,
+          is_delivered: true,
+          created_at: new Date().toISOString(),
+        };
+        return res.json(demoShipment);
+      }
 
       const db = supabase;
 
