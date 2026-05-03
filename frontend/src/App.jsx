@@ -20,6 +20,7 @@ const ProductAnalysis = lazy(() => import("./pages/ProductAnalysis"));
 const ProductDetails = lazy(() => import("./pages/ProductDetails"));
 const Orders = lazy(() => import("./pages/Orders"));
 const OrderDetails = lazy(() => import("./pages/OrderDetails"));
+const BostaScanner = lazy(() => import("./pages/BostaScanner"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Users = lazy(() => import("./pages/Users"));
 const AdminPage = lazy(() => import("./pages/Admin"));
@@ -95,6 +96,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="can_view_orders">
                     <OrderDetails />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/bosta-scanner"
+                element={
+                  <ProtectedRoute permission="can_view_orders">
+                    <BostaScanner />
                   </ProtectedRoute>
                 }
               />

@@ -43,6 +43,11 @@ exports.up = (pgm) => {
       type: "decimal(10, 2)",
       default: 0,
     },
+    expected_shipping_cost: {
+      type: "decimal(10, 2)",
+      default: 0,
+      comment: "Expected shipping cost from Bosta",
+    },
     business_reference: {
       type: "varchar(255)",
     },

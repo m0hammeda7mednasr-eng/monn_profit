@@ -321,14 +321,14 @@ class BostaService {
       type,
       codAmount: cod,
       timestamp: new Date(timeStamp),
-      isDelivered: isConfirmedDelivery,
       deliveryPromiseDate,
       exceptionReason,
       exceptionCode,
       businessReference,
       numberOfAttempts,
       // Helper flags
-      isDelivered: state === BOSTA_DELIVERY_STATES.DELIVERED,
+      isDelivered:
+        state === BOSTA_DELIVERY_STATES.DELIVERED || isConfirmedDelivery,
       isException: state === BOSTA_DELIVERY_STATES.EXCEPTION,
       isCancelled: state === BOSTA_DELIVERY_STATES.CANCELLED,
       isReturned: state === BOSTA_DELIVERY_STATES.RETURNED,
@@ -348,6 +348,7 @@ class BostaService {
       bosta_order_type: orderData.type || BOSTA_ORDER_TYPES.DELIVER,
       package_type: orderData.packageType || BOSTA_PACKAGE_TYPES.SMALL,
       cod_amount: orderData.cod || 0,
+      expected_shipping_cost: options.expectedShippingCost || 0,
       business_reference: orderData.businessReference,
       business_location_id:
         orderData.businessLocationId || DEFAULT_BUSINESS_LOCATION_ID,

@@ -220,6 +220,45 @@ router.get(
 );
 
 /**
+ * GET /api/bosta/shipments/:trackingNumber
+ * Get shipment from database (includes expected_shipping_cost)
+ */
+router.get(
+  "/shipments/:trackingNumber",
+  requireAuth,
+  requirePermissions(["can_view_orders"]),
+  async (req, res) => {
+    try {
+      const { trackingNumber } = req.params;
+
+      const db = supabase;
+      const { data: shipment, error } = await db
+        .from("bosta_shipments")
+        .select("*")
+        .eq("tracking_number", trackingNumber)
+        .single();
+
+      if (error) {
+        if (error.code === "PGRST116") {
+          return res.status(404).json({
+            error: "Shipment not found",
+          });
+        }
+        throw error;
+      }
+
+      res.json(shipment);
+    } catch (error) {
+      console.error("Failed to get shipment:", error);
+      res.status(500).json({
+        error: "Failed to get shipment from database",
+        message: error.message,
+      });
+    }
+  },
+);
+
+/**
  * POST /api/bosta/deliveries/:trackingNumber/cancel
  * Cancel delivery
  */

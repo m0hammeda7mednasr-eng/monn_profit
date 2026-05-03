@@ -11,6 +11,7 @@ import {
   Settings,
   Shield,
   ShoppingCart,
+  Truck,
   X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -33,6 +34,14 @@ const buildSharedNav = (t, select) => [
     label: t("sidebar.orders", "Orders"),
     path: "/orders",
     subtitle: t("sidebar.ordersSubtitle", "Manage all orders"),
+    permission: "can_view_orders",
+  },
+  {
+    type: "item",
+    icon: Truck,
+    label: select("بوسطة", "Bosta"),
+    path: "/bosta-scanner",
+    subtitle: select("سكان شحنات بوسطة", "Scan Bosta shipments"),
     permission: "can_view_orders",
   },
   {
