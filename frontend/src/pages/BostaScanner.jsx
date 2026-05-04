@@ -8,9 +8,7 @@ import { formatCurrency } from "../utils/helpers";
 import {
   getBostaFinancialDetails,
   getFallbackOrderCost,
-  isScannerItemFinanciallyResolved,
   parseAmount,
-  resolveBostaScannerFallback,
 } from "../utils/bostaScanner";
 import {
   isDemoTrackingNumber,
@@ -155,8 +153,7 @@ export default function BostaScanner() {
       let revenue = parseAmount(shipment.revenue);
       const financialDetails = getBostaFinancialDetails(shipment);
       let shippingCost = financialDetails.shippingFee;
-      let orderName =
-        shipment.order_name || select("غير معروف", "Unknown");
+      let orderName = shipment.order_name || select("غير معروف", "Unknown");
       let customerName =
         shipment.customer_name || select("غير معروف", "Unknown");
 
@@ -483,9 +480,9 @@ export default function BostaScanner() {
                           <div className="mt-1 text-[11px] font-normal text-slate-500">
                             {select("آخر تحديث", "Updated")}:{" "}
                             {item.last_status_update
-                              ? new Date(item.last_status_update).toLocaleString(
-                                  "en-GB",
-                                )
+                              ? new Date(
+                                  item.last_status_update,
+                                ).toLocaleString("en-GB")
                               : select("غير متاح", "Unavailable")}
                           </div>
                         </td>
@@ -564,18 +561,21 @@ export default function BostaScanner() {
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-sky-600 transition hover:text-sky-800"
-                                title={select("فتح تتبع بوسطة", "Open Bosta tracking")}
+                                title={select(
+                                  "فتح تتبع بوسطة",
+                                  "Open Bosta tracking",
+                                )}
                               >
                                 <Truck size={16} />
                               </a>
                             ) : null}
-                          <button
-                            onClick={() => handleDelete(item.tracking_number)}
-                            className="text-red-600 hover:text-red-800 transition"
-                            title={select("حذف", "Delete")}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                            <button
+                              onClick={() => handleDelete(item.tracking_number)}
+                              className="text-red-600 hover:text-red-800 transition"
+                              title={select("حذف", "Delete")}
+                            >
+                              <Trash2 size={16} />
+                            </button>
                           </div>
                         </td>
                       </tr>
