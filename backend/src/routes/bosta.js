@@ -5,6 +5,7 @@
 
 import express from "express";
 import BostaService from "../services/bostaService.js";
+import { ShopifyService } from "../services/shopifyService.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { supabase } from "../supabaseClient.js";
@@ -538,6 +539,88 @@ const findOrderByTrackingNumber = async ({
   );
 };
 
+const getShopifyTokenCandidates = async (req) => {
+  const requestedStoreId = getRequestedStoreId(req);
+  const normalizedRequestedStoreId = normalizeId(requestedStoreId);
+  const isAdmin = isAdminRequest(req);
+  const accessibleStoreIds = isAdmin ? [] : await getAccessibleStoreIds(req.user.id);
+  const scopedStoreIds = normalizedRequestedStoreId
+    ? [normalizedRequestedStoreId]
+    : accessibleStoreIds;
+
+  let query = supabase.from("shopify_tokens").select("*");
+
+  if (isAdmin) {
+    if (normalizedRequestedStoreId) {
+      query = query.eq("store_id", normalizedRequestedStoreId);
+    }
+  } else if (scopedStoreIds.length > 0) {
+    query = query.in("store_id", scopedStoreIds);
+  } else {
+    query = query.eq("user_id", req.user.id);
+  }
+
+  query = query.order("updated_at", { ascending: false }).limit(5);
+  const { data, error } = await query;
+  if (error) {
+    console.warn("Bosta scanner Shopify token lookup failed:", error.message);
+    return [];
+  }
+
+  return (data || []).filter(
+    (token) =>
+      normalizeText(token?.shop) &&
+      normalizeSecret(token?.access_token) &&
+      (isAdmin || normalizeId(token?.user_id) === normalizeId(req.user.id)),
+  );
+};
+
+const fetchShopifyOrderByReference = async ({
+  req,
+  references = [],
+}) => {
+  const referenceCandidates = Array.from(
+    new Set(references.flatMap(buildOrderReferenceCandidates).filter(Boolean)),
+  );
+  if (referenceCandidates.length === 0) {
+    return null;
+  }
+
+  const tokenCandidates = await getShopifyTokenCandidates(req);
+  if (tokenCandidates.length === 0) {
+    return null;
+  }
+
+  for (const token of tokenCandidates) {
+    const accessToken = normalizeSecret(token?.access_token);
+    const shop = normalizeText(token?.shop);
+    if (!accessToken || !shop) {
+      continue;
+    }
+
+    for (const reference of referenceCandidates) {
+      try {
+        const matchedOrders = await ShopifyService.searchOrdersFromShopify(
+          accessToken,
+          shop,
+          reference,
+          { limit: 1 },
+        );
+        if (matchedOrders?.[0]) {
+          return matchedOrders[0];
+        }
+      } catch (error) {
+        console.warn(
+          `Bosta scanner Shopify search failed for ${reference}:`,
+          error.message,
+        );
+      }
+    }
+  }
+
+  return null;
+};
+
 const getProductVariants = (product = {}) => {
   const data = parseJsonField(product?.data);
   if (Array.isArray(data?.variants)) {
@@ -734,7 +817,38 @@ const enrichShipmentWithOrderData = async ({
   });
 
   if (!order) {
-    return shipment;
+    const references = [
+      shipment?.order_id,
+      shipment?.business_reference,
+      bostaDelivery?.businessReference,
+      bostaDelivery?.data?.businessReference,
+      bostaDelivery?.bosta_response?.businessReference,
+      bostaDelivery?.shopifyOrderId,
+      bostaDelivery?.data?.shopifyOrderId,
+      bostaDelivery?.bosta_response?.shopifyOrderId,
+    ].filter(Boolean);
+
+    const liveShopifyOrder = await fetchShopifyOrderByReference({
+      req,
+      references,
+    });
+
+    if (!liveShopifyOrder) {
+      return shipment;
+    }
+
+    const totals = await calculateOrderScanTotals(req, liveShopifyOrder, shipment);
+    return {
+      ...shipment,
+      order_id:
+        liveShopifyOrder?.id ||
+        liveShopifyOrder?.shopify_id ||
+        shipment?.order_id ||
+        null,
+      order_name: getOrderDisplayName(liveShopifyOrder),
+      customer_name: getCustomerName(liveShopifyOrder),
+      ...totals,
+    };
   }
 
   const totals = await calculateOrderScanTotals(req, order, shipment);
