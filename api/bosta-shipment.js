@@ -53,6 +53,72 @@ const isDeliveredState = (code, stateName) =>
   Number(code) === 45 ||
   String(stateName || "").toUpperCase() === "DELIVERED";
 
+const toNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const getPricingAmount = (pricing = {}) => {
+  if (!pricing || typeof pricing !== "object") {
+    return 0;
+  }
+
+  const candidates = [
+    pricing?.priceAfterVat,
+    pricing?.totalAfterVat,
+    pricing?.totalWithVat,
+    pricing?.amountAfterVat,
+    pricing?.total,
+    pricing?.priceBeforeVat,
+    pricing?.shippingFee,
+  ].map(toNumber);
+
+  return candidates.find((value) => value > 0) || 0;
+};
+
+const getPricingAmountFromLogs = (delivery = {}) => {
+  const logs = Array.isArray(delivery?.log) ? delivery.log : [];
+
+  for (let index = logs.length - 1; index >= 0; index -= 1) {
+    const pricing = logs[index]?.actionsList?.pricing;
+    if (!pricing || typeof pricing !== "object") {
+      continue;
+    }
+
+    const amount =
+      getPricingAmount(pricing?.after) ||
+      getPricingAmount(pricing?.before) ||
+      getPricingAmount(pricing);
+
+    if (amount > 0) {
+      return amount;
+    }
+  }
+
+  return 0;
+};
+
+const getBostaShippingCost = (delivery = {}) => {
+  const prioritizedCost =
+    getPricingAmount(delivery?.pricing) ||
+    getPricingAmount(delivery?.pricing?.after) ||
+    getPricingAmount(delivery?.pricing?.before) ||
+    getPricingAmountFromLogs(delivery);
+
+  if (prioritizedCost > 0) {
+    return prioritizedCost;
+  }
+
+  return toNumber(
+    delivery?.estimatedDues ??
+      delivery?.amountToBeCollected ??
+      delivery?.dues ??
+      delivery?.shipmentFees ??
+      delivery?.expectedShippingCost ??
+      delivery?.shippingCost,
+  );
+};
+
 const formatPublicTrackingShipment = (publicTracking, trackingNumber) => {
   const currentStatus = publicTracking?.CurrentStatus || {};
   const transitEvents = Array.isArray(publicTracking?.TransitEvents)
@@ -240,7 +306,7 @@ export default async function handler(req, res) {
       bosta_order_type: bostaData.type,
       delivery_state: bostaData.state?.value || 0,
       delivery_state_label: bostaData.state?.label || "Unknown",
-      expected_shipping_cost: bostaData.pricing?.total || 0,
+      expected_shipping_cost: getBostaShippingCost(bostaData),
       cod_amount: bostaData.cod || 0,
       is_delivered: bostaData.state?.value === 40,
       created_at: bostaData.createdAt,

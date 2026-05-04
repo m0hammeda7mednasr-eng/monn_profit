@@ -425,13 +425,66 @@ const getBostaOrderType = (delivery = {}) => {
   return type && typeof type === "object" ? type.code || type.value : type;
 };
 
-const getBostaShippingCost = (delivery = {}) =>
-  toNumber(
-    delivery?.shipmentFees ??
-      delivery?.pricing?.total ??
+const getPricingAmount = (pricing = {}) => {
+  if (!pricing || typeof pricing !== "object") {
+    return 0;
+  }
+
+  const candidates = [
+    pricing?.priceAfterVat,
+    pricing?.totalAfterVat,
+    pricing?.totalWithVat,
+    pricing?.amountAfterVat,
+    pricing?.total,
+    pricing?.priceBeforeVat,
+    pricing?.shippingFee,
+  ].map(toNumber);
+
+  return candidates.find((value) => value > 0) || 0;
+};
+
+const getPricingAmountFromLogs = (delivery = {}) => {
+  const logs = Array.isArray(delivery?.log) ? delivery.log : [];
+
+  for (let index = logs.length - 1; index >= 0; index -= 1) {
+    const pricing = logs[index]?.actionsList?.pricing;
+    if (!pricing || typeof pricing !== "object") {
+      continue;
+    }
+
+    const amount =
+      getPricingAmount(pricing?.after) ||
+      getPricingAmount(pricing?.before) ||
+      getPricingAmount(pricing);
+
+    if (amount > 0) {
+      return amount;
+    }
+  }
+
+  return 0;
+};
+
+const getBostaShippingCost = (delivery = {}) => {
+  const prioritizedCost =
+    getPricingAmount(delivery?.pricing) ||
+    getPricingAmount(delivery?.pricing?.after) ||
+    getPricingAmount(delivery?.pricing?.before) ||
+    getPricingAmountFromLogs(delivery);
+
+  if (prioritizedCost > 0) {
+    return prioritizedCost;
+  }
+
+  return toNumber(
+    delivery?.estimatedDues ??
+      delivery?.amountToBeCollected ??
+      delivery?.dues ??
+      delivery?.shipmentFees ??
       delivery?.expectedShippingCost ??
       delivery?.shippingCost,
   );
+};
 
 const enrichShipmentWithOrderData = async ({
   req,
@@ -870,11 +923,23 @@ router.get(
         .single();
 
       if (shipment && !error) {
+        const parsedStoredResponse = parseJsonField(shipment?.bosta_response);
+        const refreshedShipment = { ...shipment };
+
+        if (toNumber(refreshedShipment.expected_shipping_cost) <= 0) {
+          const derivedShippingCost = getBostaShippingCost(parsedStoredResponse);
+          if (derivedShippingCost > 0) {
+            refreshedShipment.expected_shipping_cost =
+              roundCurrency(derivedShippingCost);
+          }
+        }
+
         return res.json(
           await enrichShipmentWithOrderData({
             req,
             trackingNumber,
-            shipment,
+            shipment: refreshedShipment,
+            bostaDelivery: parsedStoredResponse,
           }),
         );
       }

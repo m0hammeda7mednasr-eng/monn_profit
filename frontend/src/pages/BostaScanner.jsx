@@ -181,11 +181,11 @@ export default function BostaScanner() {
 
       // Check if already scanned
       const existingIndex = scannedItems.findIndex(
-        (item) => item.tracking_number === barcode.trim(),
+        (item) => item.tracking_number === trimmedBarcode,
       );
 
       const newItem = {
-        tracking_number: barcode.trim(),
+        tracking_number: trimmedBarcode,
         order_id: shipment.order_id,
         order_name: orderName,
         customer_name: customerName,
