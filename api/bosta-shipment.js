@@ -110,12 +110,91 @@ const getPricingAmountFromLogs = (delivery = {}) => {
   return 0;
 };
 
+const SHIPPING_AMOUNT_KEY_HINTS = [
+  "shipping",
+  "shipmentfees",
+  "shipment_fees",
+  "deliveryfees",
+  "delivery_fees",
+  "dues",
+  "estimateddues",
+  "feesaftervat",
+  "netfees",
+  "priceaftervat",
+  "totalaftervat",
+];
+
+const SHIPPING_AMOUNT_EXCLUDED_KEY_HINTS = [
+  "cod",
+  "cash",
+  "collect",
+  "collection",
+  "amounttobecollected",
+  "wallet",
+  "discount",
+  "refund",
+  "returned",
+];
+
+const getDeepShippingAmount = (payload = {}) => {
+  const seen = new Set();
+  const candidates = [];
+
+  const visit = (value, path = []) => {
+    if (!value || typeof value !== "object") {
+      return;
+    }
+    if (seen.has(value)) {
+      return;
+    }
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => visit(entry, [...path, String(index)]));
+      return;
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+      const nextPath = [...path, key];
+      const normalizedPath = nextPath.join(".").toLowerCase();
+      const flatPath = normalizedPath.replace(/[^a-z0-9]/g, "");
+      const numericValue = toNumber(child);
+      const hasShippingHint = SHIPPING_AMOUNT_KEY_HINTS.some(
+        (hint) => normalizedPath.includes(hint) || flatPath.includes(hint),
+      );
+      const hasExcludedHint = SHIPPING_AMOUNT_EXCLUDED_KEY_HINTS.some(
+        (hint) => normalizedPath.includes(hint) || flatPath.includes(hint),
+      );
+
+      if (numericValue > 0 && hasShippingHint && !hasExcludedHint) {
+        candidates.push(numericValue);
+      }
+
+      if (child && typeof child === "object") {
+        visit(child, nextPath);
+      }
+    }
+  };
+
+  visit(payload);
+  if (candidates.length === 0) {
+    return 0;
+  }
+
+  return candidates.reduce(
+    (lowestPositive, amount) =>
+      amount > 0 && amount < lowestPositive ? amount : lowestPositive,
+    candidates[0],
+  );
+};
+
 const getBostaShippingCost = (delivery = {}) => {
   const prioritizedCost =
     getPricingAmount(delivery?.pricing) ||
     getPricingAmount(delivery?.pricing?.after) ||
     getPricingAmount(delivery?.pricing?.before) ||
-    getPricingAmountFromLogs(delivery);
+    getPricingAmountFromLogs(delivery) ||
+    getDeepShippingAmount(delivery);
 
   if (prioritizedCost > 0) {
     return prioritizedCost;

@@ -83,6 +83,9 @@ const normalizeText = (value) =>
     .toLowerCase();
 
 const normalizeId = (value) => String(value || "").trim();
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (value) => UUID_REGEX.test(String(value || "").trim());
 
 const normalizeSecret = (value) => String(value || "").trim();
 
@@ -578,9 +581,16 @@ const getShopifyTokenCandidates = async (req) => {
 const fetchShopifyOrderByReference = async ({
   req,
   references = [],
+  trackingNumber = "",
 }) => {
+  const rawCandidates = [
+    ...references,
+    trackingNumber,
+    trackingNumber ? `tracking_number:${trackingNumber}` : "",
+    trackingNumber ? `fulfillment_tracking_number:${trackingNumber}` : "",
+  ].filter(Boolean);
   const referenceCandidates = Array.from(
-    new Set(references.flatMap(buildOrderReferenceCandidates).filter(Boolean)),
+    new Set(rawCandidates.flatMap(buildOrderReferenceCandidates).filter(Boolean)),
   );
   if (referenceCandidates.length === 0) {
     return null;
@@ -782,12 +792,91 @@ const getPricingAmountFromLogs = (delivery = {}) => {
   return 0;
 };
 
+const SHIPPING_AMOUNT_KEY_HINTS = [
+  "shipping",
+  "shipmentfees",
+  "shipment_fees",
+  "deliveryfees",
+  "delivery_fees",
+  "dues",
+  "estimateddues",
+  "feesaftervat",
+  "netfees",
+  "priceaftervat",
+  "totalaftervat",
+];
+
+const SHIPPING_AMOUNT_EXCLUDED_KEY_HINTS = [
+  "cod",
+  "cash",
+  "collect",
+  "collection",
+  "amounttobecollected",
+  "wallet",
+  "discount",
+  "refund",
+  "returned",
+];
+
+const getDeepShippingAmount = (payload = {}) => {
+  const seen = new Set();
+  const candidates = [];
+
+  const visit = (value, path = []) => {
+    if (!value || typeof value !== "object") {
+      return;
+    }
+    if (seen.has(value)) {
+      return;
+    }
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => visit(entry, [...path, String(index)]));
+      return;
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+      const nextPath = [...path, key];
+      const normalizedPath = nextPath.join(".").toLowerCase();
+      const flatPath = normalizedPath.replace(/[^a-z0-9]/g, "");
+      const numericValue = toNumber(child);
+      const hasShippingHint = SHIPPING_AMOUNT_KEY_HINTS.some(
+        (hint) => normalizedPath.includes(hint) || flatPath.includes(hint),
+      );
+      const hasExcludedHint = SHIPPING_AMOUNT_EXCLUDED_KEY_HINTS.some(
+        (hint) => normalizedPath.includes(hint) || flatPath.includes(hint),
+      );
+
+      if (numericValue > 0 && hasShippingHint && !hasExcludedHint) {
+        candidates.push(numericValue);
+      }
+
+      if (child && typeof child === "object") {
+        visit(child, nextPath);
+      }
+    }
+  };
+
+  visit(payload);
+  if (candidates.length === 0) {
+    return 0;
+  }
+
+  return candidates.reduce(
+    (lowestPositive, amount) =>
+      amount > 0 && amount < lowestPositive ? amount : lowestPositive,
+    candidates[0],
+  );
+};
+
 const getBostaShippingCost = (delivery = {}) => {
   const prioritizedCost =
     getPricingAmount(delivery?.pricing) ||
     getPricingAmount(delivery?.pricing?.after) ||
     getPricingAmount(delivery?.pricing?.before) ||
-    getPricingAmountFromLogs(delivery);
+    getPricingAmountFromLogs(delivery) ||
+    getDeepShippingAmount(delivery);
 
   if (prioritizedCost > 0) {
     return prioritizedCost;
@@ -831,6 +920,7 @@ const enrichShipmentWithOrderData = async ({
     const liveShopifyOrder = await fetchShopifyOrderByReference({
       req,
       references,
+      trackingNumber,
     });
 
     if (!liveShopifyOrder) {
@@ -859,6 +949,45 @@ const enrichShipmentWithOrderData = async ({
     customer_name: getCustomerName(order),
     ...totals,
   };
+};
+
+const persistShipmentSnapshot = async ({
+  trackingNumber,
+  shipment = {},
+}) => {
+  if (!trackingNumber) {
+    return;
+  }
+
+  const updatePayload = {
+    expected_shipping_cost: roundCurrency(
+      toNumber(shipment?.expected_shipping_cost || shipment?.shipping_cost),
+    ),
+    delivery_state: toNumber(shipment?.delivery_state),
+    delivery_state_label: shipment?.delivery_state_label || null,
+    business_reference: shipment?.business_reference || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (isUuid(shipment?.order_id)) {
+    updatePayload.order_id = shipment.order_id;
+  }
+
+  // Keep data lean and avoid writing undefined values
+  Object.keys(updatePayload).forEach((key) => {
+    if (updatePayload[key] === undefined) {
+      delete updatePayload[key];
+    }
+  });
+
+  const { error } = await supabase
+    .from("bosta_shipments")
+    .update(updatePayload)
+    .eq("tracking_number", trackingNumber);
+
+  if (error) {
+    console.warn("Failed to persist shipment snapshot:", error.message);
+  }
 };
 
 /**
@@ -1295,14 +1424,19 @@ router.get(
           }
         }
 
-        return res.json(
-          await enrichShipmentWithOrderData({
-            req,
-            trackingNumber,
-            shipment: refreshedShipment,
-            bostaDelivery: parsedStoredResponse,
-          }),
-        );
+        const enrichedShipment = await enrichShipmentWithOrderData({
+          req,
+          trackingNumber,
+          shipment: refreshedShipment,
+          bostaDelivery: parsedStoredResponse,
+        });
+
+        await persistShipmentSnapshot({
+          trackingNumber,
+          shipment: enrichedShipment,
+        });
+
+        return res.json(enrichedShipment);
       }
 
       const resolvedBosta = await resolveBostaServiceForRequest(req);
