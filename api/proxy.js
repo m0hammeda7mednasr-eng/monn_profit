@@ -16,14 +16,11 @@ const resolveBackendApiBaseUrl = () => {
 
 const buildTargetUrl = (req) => {
   const base = resolveBackendApiBaseUrl();
-  const pathSegments = Array.isArray(req.query?.proxy)
-    ? req.query.proxy
-    : [req.query?.proxy].filter(Boolean);
-  const path = pathSegments.map((segment) => encodeURIComponent(segment)).join("/");
-  const url = new URL(`${base}/${path}`);
+  const rawPath = String(req.query?.path || "").trim();
+  const url = new URL(`${base}/${rawPath}`);
 
   Object.entries(req.query || {}).forEach(([key, value]) => {
-    if (key === "proxy") return;
+    if (key === "path") return;
     if (Array.isArray(value)) {
       value.forEach((entry) => url.searchParams.append(key, String(entry)));
       return;

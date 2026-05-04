@@ -8,12 +8,20 @@
       "memory": 1024,
       "maxDuration": 10
     },
-    "api/[...proxy].js": {
+    "api/proxy.js": {
       "memory": 1024,
       "maxDuration": 15
     }
   },
   "rewrites": [
+    {
+      "source": "/api/bosta-shipment",
+      "destination": "/api/bosta-shipment"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/proxy?path=:path*"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"

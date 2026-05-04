@@ -52,7 +52,7 @@ The Vercel serverless function (`/api/bosta-shipment`) acts as a proxy:
 This works even if Railway backend is down!
 
 All other frontend API requests (`/api/users/*`, `/api/notifications/*`, etc.)
-are now proxied by the catch-all function `api/[...proxy].js` to
+are now proxied by `api/proxy.js` through Vercel rewrites to
 `BACKEND_API_BASE_URL`.
 
 ## Troubleshooting
