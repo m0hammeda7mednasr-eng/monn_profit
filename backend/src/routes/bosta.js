@@ -951,6 +951,17 @@ const getPricingAmount = (pricing = {}) => {
   ]);
 };
 
+const getPricingShippingFeeAmount = (pricing = {}) => {
+  if (!pricing || typeof pricing !== "object") {
+    return 0;
+  }
+
+  return getFirstPositiveAmount([
+    pricing?.shippingFee,
+    pricing?.shipping_fee,
+  ]);
+};
+
 const getPricingAmountFromLogs = (delivery = {}) => {
   const logs = Array.isArray(delivery?.log) ? delivery.log : [];
 
@@ -964,6 +975,28 @@ const getPricingAmountFromLogs = (delivery = {}) => {
       getPricingAmount(pricing?.after) ||
       getPricingAmount(pricing?.before) ||
       getPricingAmount(pricing);
+
+    if (amount > 0) {
+      return amount;
+    }
+  }
+
+  return 0;
+};
+
+const getShippingFeeAmountFromLogs = (delivery = {}) => {
+  const logs = Array.isArray(delivery?.log) ? delivery.log : [];
+
+  for (let index = logs.length - 1; index >= 0; index -= 1) {
+    const pricing = logs[index]?.actionsList?.pricing;
+    if (!pricing || typeof pricing !== "object") {
+      continue;
+    }
+
+    const amount =
+      getPricingShippingFeeAmount(pricing?.after) ||
+      getPricingShippingFeeAmount(pricing?.before) ||
+      getPricingShippingFeeAmount(pricing);
 
     if (amount > 0) {
       return amount;
@@ -1070,8 +1103,28 @@ const getDeepShippingAmount = (payload = {}) => {
   return candidates[0].amount;
 };
 
+const getDirectBostaShippingFeeAmount = (delivery = {}) =>
+  getFirstPositiveAmount([
+    delivery?.wallet?.cashCycle?.shipping_fees,
+    delivery?.wallet?.cashCycle?.shippingFees,
+    delivery?.pricing?.shippingFee,
+    delivery?.pricing?.shipping_fee,
+    delivery?.pricing?.after?.shippingFee,
+    delivery?.pricing?.after?.shipping_fee,
+    delivery?.pricing?.before?.shippingFee,
+    delivery?.pricing?.before?.shipping_fee,
+    delivery?.shippingFee,
+    delivery?.shipping_fee,
+    delivery?.expectedShippingCost,
+    delivery?.expected_shipping_cost,
+    delivery?.shippingCost,
+    delivery?.shipping_cost,
+  ]);
+
 const getDirectBostaDuesAmount = (delivery = {}) =>
   getFirstPositiveAmount([
+    delivery?.wallet?.cashCycle?.bosta_fees,
+    delivery?.wallet?.cashCycle?.bostaFees,
     delivery?.estimatedDues,
     delivery?.estimated_dues,
     delivery?.estimatedBostaDues,
@@ -1093,6 +1146,9 @@ const getDirectBostaDuesAmount = (delivery = {}) =>
 
 const getBostaShippingCost = (delivery = {}) => {
   const prioritizedCost =
+    getDirectBostaShippingFeeAmount(delivery) ||
+    getShippingFeeAmountFromLogs(delivery) ||
+    getFirstPositiveAmount([delivery?.shipmentFees, delivery?.shipment_fees]) ||
     getDirectBostaDuesAmount(delivery) ||
     getPricingAmount(delivery?.pricing) ||
     getPricingAmount(delivery?.pricing?.after) ||

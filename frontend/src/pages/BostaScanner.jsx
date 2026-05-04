@@ -6,21 +6,16 @@ import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
 import { formatCurrency } from "../utils/helpers";
 import {
+  getBostaFinancialDetails,
+  getFallbackOrderCost,
+  isScannerItemFinanciallyResolved,
+  parseAmount,
+  resolveBostaScannerFallback,
+} from "../utils/bostaScanner";
+import {
   isDemoTrackingNumber,
   normalizeTrackingNumber,
 } from "../utils/bostaTracking";
-
-const parseAmount = (value) => {
-  const parsed = parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const getFallbackOrderCost = (order) =>
-  order.line_items?.reduce((sum, item) => {
-    const cost = parseFloat(item.cost_price || 0);
-    const quantity = parseInt(item.quantity || 0, 10);
-    return sum + cost * quantity;
-  }, 0) || 0;
 
 const extractFetchErrorMessage = async (response) => {
   try {
@@ -158,9 +153,8 @@ export default function BostaScanner() {
       let order = null;
       let totalCost = parseAmount(shipment.total_cost);
       let revenue = parseAmount(shipment.revenue);
-      let shippingCost = parseAmount(
-        shipment.shipping_cost ?? shipment.expected_shipping_cost,
-      );
+      const financialDetails = getBostaFinancialDetails(shipment);
+      let shippingCost = financialDetails.shippingFee;
       let orderName =
         shipment.order_name || select("غير معروف", "Unknown");
       let customerName =
@@ -207,7 +201,7 @@ export default function BostaScanner() {
       // If the shipment is not linked to an internal order yet, fallback to COD
       // so the scanner still reflects a realistic collected amount.
       if (revenue <= 0) {
-        revenue = parseAmount(shipment.cod_amount);
+        revenue = financialDetails.codAmount;
       }
 
       const netProfit = revenue - totalCost;
@@ -228,8 +222,17 @@ export default function BostaScanner() {
         shipping_cost: shippingCost,
         net_profit: netProfit,
         real_net_profit: realNetProfit,
+        cod_amount: financialDetails.codAmount,
+        bosta_dues: financialDetails.bostaDues,
+        deposited_amount: financialDetails.depositedAmount,
+        vat_amount: financialDetails.vatAmount,
+        opening_package_fees: financialDetails.openingPackageFees,
         delivery_state: shipment.delivery_state,
         delivery_state_label: shipment.delivery_state_label,
+        tracking_url: financialDetails.trackingUrl,
+        promised_date: financialDetails.promisedDate,
+        last_status_update: financialDetails.lastStatusUpdate,
+        support_phone_numbers: financialDetails.supportPhoneNumbers,
         scanned_at: new Date().toISOString(),
       };
 
@@ -278,10 +281,20 @@ export default function BostaScanner() {
       revenue: acc.revenue + item.revenue,
       cost: acc.cost + item.total_cost,
       shipping: acc.shipping + item.shipping_cost,
+      bostaDues: acc.bostaDues + parseAmount(item.bosta_dues),
+      cashout: acc.cashout + parseAmount(item.deposited_amount),
       netProfit: acc.netProfit + item.net_profit,
       realNetProfit: acc.realNetProfit + item.real_net_profit,
     }),
-    { revenue: 0, cost: 0, shipping: 0, netProfit: 0, realNetProfit: 0 },
+    {
+      revenue: 0,
+      cost: 0,
+      shipping: 0,
+      bostaDues: 0,
+      cashout: 0,
+      netProfit: 0,
+      realNetProfit: 0,
+    },
   );
 
   if (!canViewOrders) {
@@ -374,7 +387,7 @@ export default function BostaScanner() {
 
           {/* Summary Cards */}
           {scannedItems.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
               <SummaryCard
                 icon={Package}
                 label={select("عدد الشحنات", "Shipments")}
@@ -398,6 +411,18 @@ export default function BostaScanner() {
                 label={select("تكلفة الشحن", "Shipping Cost")}
                 value={formatCurrency(totals.shipping)}
                 color="orange"
+              />
+              <SummaryCard
+                icon={DollarSign}
+                label={select("مستحقات بوسطة", "Bosta Dues")}
+                value={formatCurrency(totals.bostaDues)}
+                color="slate"
+              />
+              <SummaryCard
+                icon={TrendingUp}
+                label={select("الصافي المودَع", "Net Cashout")}
+                value={formatCurrency(totals.cashout)}
+                color="sky"
               />
               <SummaryCard
                 icon={TrendingUp}
@@ -454,7 +479,15 @@ export default function BostaScanner() {
                         className="hover:bg-slate-50"
                       >
                         <td className="px-4 py-3 text-sm font-mono text-slate-900">
-                          {item.tracking_number}
+                          <div>{item.tracking_number}</div>
+                          <div className="mt-1 text-[11px] font-normal text-slate-500">
+                            {select("آخر تحديث", "Updated")}:{" "}
+                            {item.last_status_update
+                              ? new Date(item.last_status_update).toLocaleString(
+                                  "en-GB",
+                                )
+                              : select("غير متاح", "Unavailable")}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <span
@@ -485,7 +518,10 @@ export default function BostaScanner() {
                           {item.order_name}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-600">
-                          {item.customer_name}
+                          <div>{item.customer_name}</div>
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            COD: {formatCurrency(item.cod_amount)}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-right font-medium text-green-700">
                           {formatCurrency(item.revenue)}
@@ -493,8 +529,12 @@ export default function BostaScanner() {
                         <td className="px-4 py-3 text-sm text-right text-slate-600">
                           {formatCurrency(item.total_cost)}
                         </td>
-                        <td className="px-4 py-3 text-sm text-right text-orange-600">
-                          {formatCurrency(item.shipping_cost)}
+                        <td className="px-4 py-3 text-right text-sm text-orange-600">
+                          <div>{formatCurrency(item.shipping_cost)}</div>
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            {select("مستحقات بوسطة", "Bosta Dues")}:{" "}
+                            {formatCurrency(item.bosta_dues)}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-right font-medium text-purple-700">
                           {formatCurrency(item.net_profit)}
@@ -506,9 +546,29 @@ export default function BostaScanner() {
                               : "text-red-700"
                           }`}
                         >
-                          {formatCurrency(item.real_net_profit)}
+                          <div>{formatCurrency(item.real_net_profit)}</div>
+                          <div className="mt-1 text-[11px] font-medium text-slate-500">
+                            {select("الصافي المودَع", "Net Cashout")}:{" "}
+                            {formatCurrency(item.deposited_amount)}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-3">
+                            {item.tracking_url ? (
+                              <a
+                                href={
+                                  item.tracking_url.startsWith("http")
+                                    ? item.tracking_url
+                                    : `https://${item.tracking_url}`
+                                }
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sky-600 transition hover:text-sky-800"
+                                title={select("فتح تتبع بوسطة", "Open Bosta tracking")}
+                              >
+                                <Truck size={16} />
+                              </a>
+                            ) : null}
                           <button
                             onClick={() => handleDelete(item.tracking_number)}
                             className="text-red-600 hover:text-red-800 transition"
@@ -516,6 +576,7 @@ export default function BostaScanner() {
                           >
                             <Trash2 size={16} />
                           </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -577,6 +638,8 @@ function SummaryCard({ icon: Icon, label, value, color }) {
     green: "bg-green-50 text-green-700 border-green-200",
     purple: "bg-purple-50 text-purple-700 border-purple-200",
     orange: "bg-orange-50 text-orange-700 border-orange-200",
+    slate: "bg-slate-50 text-slate-700 border-slate-200",
+    sky: "bg-sky-50 text-sky-700 border-sky-200",
     emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
     red: "bg-red-50 text-red-700 border-red-200",
   };

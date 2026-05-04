@@ -278,7 +278,14 @@ export default function BarcodeLabelModal({
       (Array.isArray(targets) ? targets : [])
         .map((target, index) => ({
           key: String(target?.key || target?.id || `label-target-${index}`),
-          title: String(target?.title || "").trim(),
+          title: String(
+            target?.title ||
+              target?.product_title ||
+              target?.name ||
+              target?.sku ||
+              target?.barcode ||
+              select("منتج بدون اسم", "Untitled item"),
+          ).trim(),
           subtitle: String(target?.subtitle || "").trim(),
           sku: String(target?.sku || "").trim(),
           barcode: String(target?.barcode || "").trim(),
@@ -286,8 +293,11 @@ export default function BarcodeLabelModal({
           supplierCode: String(target?.supplier_code || "").trim(),
           supplierName: String(target?.supplier_name || "").trim(),
         }))
-        .filter((target) => target.title),
-    [targets],
+        .filter(
+          (target) =>
+            target.title || target.subtitle || target.sku || target.barcode,
+        ),
+    [select, targets],
   );
 
   const selectedPreset = useMemo(
