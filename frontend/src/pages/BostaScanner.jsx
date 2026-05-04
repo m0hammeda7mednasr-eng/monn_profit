@@ -118,13 +118,22 @@ export default function BostaScanner() {
         return;
       }
 
+      const parseAmount = (value) => {
+        const parsed = parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
       let order = null;
-      let totalCost = 0;
-      let revenue = 0;
-      let orderName = select("غير معروف", "Unknown");
-      let customerName = select("غير معروف", "Unknown");
+      let totalCost = parseAmount(shipment.total_cost);
+      let revenue = parseAmount(shipment.revenue);
+      let shippingCost = parseAmount(
+        shipment.shipping_cost ?? shipment.expected_shipping_cost,
+      );
+      let orderName =
+        shipment.order_name || select("غير معروف", "Unknown");
+      let customerName =
+        shipment.customer_name || select("غير معروف", "Unknown");
 
-      // Try to get order details if order_id exists
+      // Try to get order details if the backend did not already enrich the scan.
       if (shipment.order_id) {
         try {
           const orderResponse = await api.get(
@@ -132,24 +141,41 @@ export default function BostaScanner() {
           );
           order = orderResponse.data;
 
-          // Calculate costs
-          totalCost =
+          // Calculate costs only as a fallback. The Bosta route now returns
+          // enriched totals when it can match the tracking number to an order.
+          const fallbackTotalCost =
             order.line_items?.reduce((sum, item) => {
               const cost = parseFloat(item.cost_price || 0);
               const quantity = parseInt(item.quantity || 0);
               return sum + cost * quantity;
             }, 0) || 0;
 
-          revenue = parseFloat(order.total_price || 0);
-          orderName = order.name || order.order_number || shipment.order_id;
-          customerName = order.customer?.name || select("غير معروف", "Unknown");
+          if (revenue <= 0) {
+            revenue = parseAmount(order.total_price);
+          }
+          if (totalCost <= 0) {
+            totalCost = fallbackTotalCost;
+          }
+          orderName =
+            shipment.order_name ||
+            order.name ||
+            order.order_number ||
+            shipment.order_id;
+          customerName =
+            shipment.customer_name ||
+            order.customer?.name ||
+            order.customer_info?.name ||
+            [order.customer_info?.first_name, order.customer_info?.last_name]
+              .filter(Boolean)
+              .join(" ") ||
+            order.customer_name ||
+            select("غير معروف", "Unknown");
         } catch (orderError) {
           console.warn("Could not fetch order details:", orderError);
           // Continue without order details
         }
       }
 
-      const shippingCost = parseFloat(shipment.expected_shipping_cost || 0);
       const netProfit = revenue - totalCost;
       const realNetProfit = netProfit - shippingCost;
 

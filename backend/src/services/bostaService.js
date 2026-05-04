@@ -7,6 +7,7 @@
 import { supabase } from "../supabaseClient.js";
 
 const DEFAULT_BOSTA_API_BASE_URL = "https://app.bosta.co/api/v2";
+const DEFAULT_BOSTA_LEGACY_API_BASE_URL = "https://app.bosta.co/api/v0";
 const DEFAULT_BOSTA_TRACKING_BASE_URL = "https://tracking.bosta.co";
 
 const normalizeBaseUrl = (value) =>
@@ -52,6 +53,7 @@ class BostaService {
   constructor({
     apiKey = process.env.BOSTA_API_KEY,
     baseUrl = process.env.BOSTA_API_BASE_URL,
+    legacyBaseUrl = process.env.BOSTA_LEGACY_API_BASE_URL,
   } = {}) {
     const normalizedApiKey = String(apiKey || "").trim();
     if (!normalizedApiKey) {
@@ -59,6 +61,9 @@ class BostaService {
     }
     this.apiKey = normalizedApiKey;
     this.baseUrl = normalizeBaseUrl(baseUrl);
+    this.legacyBaseUrl = normalizeBaseUrl(
+      legacyBaseUrl || DEFAULT_BOSTA_LEGACY_API_BASE_URL,
+    );
   }
 
   /**
@@ -112,6 +117,66 @@ class BostaService {
         throw new Error(message);
       }
       throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async makeLegacyRequest(endpoint, options = {}) {
+    const url = `${this.legacyBaseUrl}${endpoint}`;
+    const timeoutMs = parsePositiveInteger(
+      options.timeoutMs || process.env.BOSTA_API_TIMEOUT_MS,
+      20000,
+    );
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const fetchOptions = { ...options };
+    const signal = fetchOptions.signal;
+    delete fetchOptions.timeoutMs;
+    delete fetchOptions.signal;
+
+    try {
+      const response = await fetch(url, {
+        ...fetchOptions,
+        headers: {
+          Authorization: this.apiKey,
+          "Content-Type": "application/json",
+          "X-Requested-By": "nodejs-sdk",
+          ...fetchOptions.headers,
+        },
+        signal: signal || controller.signal,
+      });
+      const text = await response.text();
+      let data = null;
+
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        throw new Error(
+          `Bosta legacy API returned a non-JSON response (${response.status})`,
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `Bosta legacy API Error: ${response.status} - ${
+            data?.message || "Unknown error"
+          }`,
+        );
+      }
+
+      return data;
+    } catch (error) {
+      const message =
+        error.name === "AbortError"
+          ? `Bosta legacy API request timed out after ${timeoutMs}ms`
+          : error.message;
+      console.error("Bosta Legacy API Request Failed:", {
+        endpoint,
+        error: message,
+        url,
+      });
+      throw new Error(message);
     } finally {
       clearTimeout(timeout);
     }
@@ -172,9 +237,15 @@ class BostaService {
   async getDeliveryStatus(trackingNumber) {
     const endpoint = `/deliveries/${trackingNumber}`;
 
-    return await this.makeRequest(endpoint, {
-      method: "GET",
-    });
+    try {
+      return await this.makeRequest(endpoint, {
+        method: "GET",
+      });
+    } catch {
+      return await this.makeLegacyRequest(endpoint, {
+        method: "GET",
+      });
+    }
   }
 
   /**

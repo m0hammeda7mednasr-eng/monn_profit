@@ -338,6 +338,40 @@ describe("BostaService", () => {
       );
     });
 
+    test("getDeliveryStatus should fall back to legacy Bosta API", async () => {
+      fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.reject(new SyntaxError("Unexpected token '<'")),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: () =>
+            Promise.resolve(
+              JSON.stringify({
+                trackingNumber: "TRK-123",
+                businessReference: "#1001",
+              }),
+            ),
+        });
+
+      const result = await bostaService.getDeliveryStatus("TRK-123");
+
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        "https://app.bosta.co/api/v0/deliveries/TRK-123",
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.objectContaining({
+            Authorization: "test-api-key",
+            "X-Requested-By": "nodejs-sdk",
+          }),
+        }),
+      );
+      expect(result.businessReference).toBe("#1001");
+    });
+
     test("cancelDelivery should call correct endpoint", async () => {
       await bostaService.cancelDelivery("TRK-123");
 
