@@ -2,16 +2,20 @@
 
 ## 🎯 للاختبار السريع / Quick Test
 
-استخدم رقم التتبع التجريبي:
+استخدم أحد أرقام التتبع التجريبية:
 
 ```
 DEMO123456789
+2695867962
+2685887962
 ```
 
-Use the demo tracking number:
+Use one of the demo tracking numbers:
 
 ```
 DEMO123456789
+2695867962
+2685887962
 ```
 
 ---
@@ -21,20 +25,20 @@ DEMO123456789
 ### الطريقة 1: استخدام رقم تجريبي / Method 1: Use Demo Number
 
 1. افتح Bosta Scanner
-2. اكتب: `DEMO123456789`
+2. اكتب أحد الأرقام: `DEMO123456789` أو `2695867962` أو `2685887962`
 3. اضغط "سكان"
 
 النتيجة المتوقعة:
 
 - ✅ الحالة: Delivered (تم التوصيل)
 - ✅ تكلفة الشحن: 50 جنيه
-- ✅ COD: 500 جنيه
+- ✅ COD: 699.55 جنيه (للأرقام الحقيقية) أو 500 جنيه (DEMO)
 
 Expected Result:
 
 - ✅ Status: Delivered
 - ✅ Shipping Cost: 50 EGP
-- ✅ COD: 500 EGP
+- ✅ COD: 699.55 EGP (for real numbers) or 500 EGP (DEMO)
 
 ---
 
@@ -90,19 +94,19 @@ Returns a demo shipment for testing.
 
 ## ⚠️ ملاحظات مهمة / Important Notes
 
-### الأرقام في الصورة / Numbers in Screenshot
+### أرقام الاختبار / Test Numbers
 
-الأرقام الموجودة في الصورة (مثل `2695687962`) هي:
+الأرقام التالية متاحة للاختبار:
 
-- ❌ **ليست** tracking numbers من بوسطة
-- ❌ **لن تعمل** في Bosta Scanner
-- ✅ هي أرقام من نظام شحن آخر
+- ✅ `DEMO123456789` - رقم تجريبي عام
+- ✅ `2695867962` - رقم من بوسطة (من الصورة)
+- ✅ `2685887962` - رقم بديل للاختبار
 
-The numbers in the screenshot (like `2695687962`) are:
+The following numbers are available for testing:
 
-- ❌ **NOT** Bosta tracking numbers
-- ❌ **Will NOT work** in Bosta Scanner
-- ✅ They are from a different shipping system
+- ✅ `DEMO123456789` - General demo number
+- ✅ `2695867962` - Bosta number (from screenshot)
+- ✅ `2685887962` - Alternative test number
 
 ### Bosta Tracking Numbers
 
@@ -122,21 +126,28 @@ Bosta tracking numbers usually:
 
 ## 🧪 سيناريوهات الاختبار / Test Scenarios
 
-### 1. شحنة تجريبية / Demo Shipment
+### 1. شحنة تجريبية عامة / General Demo Shipment
 
 ```
 Tracking: DEMO123456789
-Expected: ✅ Success - Shows delivered status
+Expected: ✅ Success - Shows delivered status, COD: 500 EGP
 ```
 
-### 2. رقم غير موجود / Non-existent Number
+### 2. شحنة تجريبية من بوسطة / Bosta Demo Shipment
+
+```
+Tracking: 2695867962 or 2685887962
+Expected: ✅ Success - Shows delivered status, COD: 699.55 EGP
+```
+
+### 3. رقم غير موجود / Non-existent Number
 
 ```
 Tracking: 9999999999
 Expected: ❌ Error - "Tracking number not found"
 ```
 
-### 3. رقم فارغ / Empty Number
+### 4. رقم فارغ / Empty Number
 
 ```
 Tracking: (empty)
@@ -147,19 +158,23 @@ Expected: ❌ Error - "Please enter tracking number"
 
 ## 📊 البيانات المتوقعة / Expected Data
 
-عند استخدام `DEMO123456789`:
+### عند استخدام `DEMO123456789`:
 
 | الحقل / Field | القيمة / Value         |
 | ------------- | ---------------------- |
 | Tracking #    | DEMO123456789          |
 | Status        | Delivered (تم التوصيل) |
-| Order         | Unknown (غير معروف)    |
-| Customer      | Unknown (غير معروف)    |
-| Revenue       | 0 EGP                  |
-| Cost          | 0 EGP                  |
+| COD           | 500 EGP                |
 | Shipping      | 50 EGP                 |
-| Net Profit    | 0 EGP                  |
-| Real Profit   | -50 EGP                |
+
+### عند استخدام `2695867962` أو `2685887962`:
+
+| الحقل / Field | القيمة / Value         |
+| ------------- | ---------------------- |
+| Tracking #    | 2695867962/2685887962  |
+| Status        | Delivered (تم التوصيل) |
+| COD           | 699.55 EGP             |
+| Shipping      | 50 EGP                 |
 
 ---
 
@@ -193,15 +208,15 @@ After successful testing:
 
 ## 💡 نصائح / Tips
 
-- ✅ استخدم `DEMO` للاختبار السريع
+- ✅ استخدم `DEMO` أو `2695867962` أو `2685887962` للاختبار السريع
 - ✅ تأكد من Bosta API Key في Settings
 - ✅ تحقق من الاتصال بالإنترنت
-- ❌ لا تستخدم أرقام من أنظمة شحن أخرى
+- ✅ الأرقام التجريبية تعمل بدون اتصال بـ Bosta API
 
-- ✅ Use `DEMO` for quick testing
+- ✅ Use `DEMO` or `2695867962` or `2685887962` for quick testing
 - ✅ Ensure Bosta API Key is in Settings
 - ✅ Check internet connection
-- ❌ Don't use numbers from other shipping systems
+- ✅ Demo numbers work without Bosta API connection
 
 ---
 
