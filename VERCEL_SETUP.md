@@ -15,6 +15,16 @@ You need to add the following environment variable in Vercel dashboard:
    - **Environment:** Production, Preview, Development (select all)
 5. Click "Save"
 
+### BACKEND_API_BASE_URL
+
+This should point to your deployed backend API base (must end with `/api`).
+
+Example:
+
+- **Name:** `BACKEND_API_BASE_URL`
+- **Value:** `https://your-backend-domain.com/api`
+- **Environment:** Production, Preview, Development (select all)
+
 ## Redeploy
 
 After adding the environment variable:
@@ -40,6 +50,10 @@ The Vercel serverless function (`/api/bosta-shipment`) acts as a proxy:
 3. Returns shipment data to frontend
 
 This works even if Railway backend is down!
+
+All other frontend API requests (`/api/users/*`, `/api/notifications/*`, etc.)
+are now proxied by the catch-all function `api/[...proxy].js` to
+`BACKEND_API_BASE_URL`.
 
 ## Troubleshooting
 
