@@ -8,7 +8,7 @@ import BostaService from "../services/bostaService.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { supabase } from "../supabaseClient.js";
-import { Order, Product } from "../models/index.js";
+import { Order, Product, getAccessibleStoreIds } from "../models/index.js";
 
 const router = express.Router();
 
@@ -20,28 +20,16 @@ const extractBostaList = (payload) => {
   return payload;
 };
 
-// Initialize Bosta service
-let bostaService;
-try {
-  if (process.env.BOSTA_API_KEY) {
-    bostaService = new BostaService();
-  }
-} catch (error) {
-  console.warn("Bosta service initialization failed:", error.message);
-}
+let environmentBostaService = null;
+let environmentBostaServiceKey = "";
 
-/**
- * Middleware to check if Bosta service is available
- */
-const requireBostaService = (req, res, next) => {
-  if (!bostaService) {
-    return res.status(503).json({
-      error:
-        "Bosta service is not configured. Please configure Bosta API Key in Settings.",
-    });
-  }
-  next();
-};
+const SCHEMA_ERROR_CODES = new Set([
+  "42P01",
+  "42P10",
+  "42703",
+  "PGRST204",
+  "PGRST205",
+]);
 
 const fetchPublicTrackingShipment = async (trackingNumber) => {
   const publicTracking =
@@ -89,6 +77,223 @@ const normalizeText = (value) =>
     .toLowerCase();
 
 const normalizeId = (value) => String(value || "").trim();
+
+const normalizeSecret = (value) => String(value || "").trim();
+
+const maskSecret = (value) => {
+  const normalized = normalizeSecret(value);
+  if (!normalized) {
+    return "";
+  }
+  if (normalized.length <= 8) {
+    return "********";
+  }
+  return normalized.slice(0, 4) + "****" + normalized.slice(-4);
+};
+
+const isSchemaCompatibilityError = (error) => {
+  if (!error) {
+    return false;
+  }
+
+  const code = String(error.code || "").trim().toUpperCase();
+  if (SCHEMA_ERROR_CODES.has(code)) {
+    return true;
+  }
+
+  const text =
+    `${error.message || ""} ${error.details || ""} ${error.hint || ""}`.toLowerCase();
+
+  return (
+    text.includes("does not exist") ||
+    text.includes("relation") ||
+    text.includes("column") ||
+    text.includes("schema cache") ||
+    text.includes("permission denied") ||
+    text.includes("row-level security")
+  );
+};
+
+const getRequestedStoreId = (req) => {
+  const headerStoreId =
+    typeof req.headers["x-store-id"] === "string"
+      ? req.headers["x-store-id"].trim()
+      : "";
+  const queryStoreId =
+    typeof req.query?.store_id === "string" ? req.query.store_id.trim() : "";
+
+  return queryStoreId || headerStoreId || "";
+};
+
+const resolveStoreScope = async (req) => {
+  const requestedStoreId = getRequestedStoreId(req);
+  if (requestedStoreId) {
+    if (req.user?.role === "admin" || req.user?.isAdmin) {
+      return requestedStoreId;
+    }
+
+    const accessibleStoreIds = await getAccessibleStoreIds(req.user.id);
+    if (accessibleStoreIds.includes(requestedStoreId)) {
+      return requestedStoreId;
+    }
+
+    return "";
+  }
+
+  const accessibleStoreIds = await getAccessibleStoreIds(req.user.id);
+  return accessibleStoreIds.length === 1 ? accessibleStoreIds[0] : "";
+};
+
+const loadBostaIntegration = async (storeId) => {
+  if (!storeId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("bosta_integrations")
+    .select("*")
+    .eq("store_id", storeId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || null;
+};
+
+const saveBostaIntegration = async ({
+  storeId,
+  userId,
+  apiKey,
+  existingIntegration = undefined,
+}) => {
+  const currentIntegration =
+    existingIntegration === undefined
+      ? await loadBostaIntegration(storeId)
+      : existingIntegration;
+
+  const query = currentIntegration?.id
+    ? supabase
+        .from("bosta_integrations")
+        .update({
+          api_key: apiKey,
+          is_active: true,
+          updated_by: userId,
+        })
+        .eq("id", currentIntegration.id)
+    : supabase.from("bosta_integrations").insert({
+        store_id: storeId,
+        api_key: apiKey,
+        is_active: true,
+        created_by: userId,
+        updated_by: userId,
+      });
+
+  const { data, error } = await query.select().single();
+  if (error) {
+    throw error;
+  }
+
+  return data;
+};
+
+const getEnvironmentBostaService = () => {
+  const apiKey = normalizeSecret(process.env.BOSTA_API_KEY);
+  if (!apiKey) {
+    environmentBostaService = null;
+    environmentBostaServiceKey = "";
+    return null;
+  }
+
+  if (environmentBostaService && environmentBostaServiceKey === apiKey) {
+    return environmentBostaService;
+  }
+
+  try {
+    environmentBostaService = new BostaService({ apiKey });
+    environmentBostaServiceKey = apiKey;
+    return environmentBostaService;
+  } catch (error) {
+    console.warn(
+      "Bosta service initialization from environment failed:",
+      error.message,
+    );
+    environmentBostaService = null;
+    environmentBostaServiceKey = "";
+    return null;
+  }
+};
+
+const resolveBostaServiceForRequest = async (req) => {
+  const storeId = await resolveStoreScope(req);
+  let integration = null;
+
+  if (storeId) {
+    try {
+      integration = await loadBostaIntegration(storeId);
+    } catch (error) {
+      if (!isSchemaCompatibilityError(error)) {
+        throw error;
+      }
+      console.warn(
+        "Bosta integrations table is unavailable, falling back to env key.",
+      );
+    }
+  }
+
+  const integrationApiKey = normalizeSecret(integration?.api_key);
+  const environmentService = getEnvironmentBostaService();
+  const environmentApiKey = normalizeSecret(process.env.BOSTA_API_KEY);
+  const resolvedApiKey = integrationApiKey || environmentApiKey;
+
+  if (!resolvedApiKey) {
+    return { storeId, integration, service: null, source: null };
+  }
+
+  if (integrationApiKey) {
+    return {
+      storeId,
+      integration,
+      service: new BostaService({ apiKey: integrationApiKey }),
+      source: "settings",
+    };
+  }
+
+  return {
+    storeId,
+    integration,
+    service: environmentService,
+    source: environmentService ? "environment" : null,
+  };
+};
+
+/**
+ * Middleware to check if Bosta service is available
+ */
+const requireBostaService = async (req, res, next) => {
+  try {
+    const resolved = await resolveBostaServiceForRequest(req);
+    if (!resolved?.service) {
+      return res.status(503).json({
+        error:
+          "Bosta service is not configured. Save Bosta API key from Settings first.",
+      });
+    }
+    req.bostaService = resolved.service;
+    req.bostaIntegration = resolved.integration;
+    req.bostaStoreId = resolved.storeId;
+    req.bostaConfigSource = resolved.source;
+    return next();
+  } catch (error) {
+    console.error("Failed to resolve Bosta configuration:", error);
+    return res.status(500).json({
+      error: "Failed to resolve Bosta configuration",
+      message: error.message,
+    });
+  }
+};
 
 const stripOrderReferencePrefix = (value) =>
   String(value || "")
@@ -519,10 +724,17 @@ const enrichShipmentWithOrderData = async ({
  */
 router.get("/config", authenticateToken, async (req, res) => {
   try {
-    const hasConfig = Boolean(process.env.BOSTA_API_KEY);
+    const resolved = await resolveBostaServiceForRequest(req);
+    const hasConfig = Boolean(resolved?.service);
     const config = {
       hasConfig,
-      apiKey: hasConfig ? "********" : "",
+      apiKey: hasConfig
+        ? maskSecret(
+            resolved?.integration?.api_key || process.env.BOSTA_API_KEY || "",
+          )
+        : "",
+      source: resolved?.source || null,
+      storeId: resolved?.storeId || "",
     };
     res.json(config);
   } catch (error) {
@@ -544,9 +756,28 @@ router.post(
   requirePermission("can_manage_settings"),
   async (req, res) => {
     try {
+      const storeId = await resolveStoreScope(req);
+      if (!storeId) {
+        return res.status(400).json({
+          error: "Select a store first before saving Bosta configuration.",
+        });
+      }
+
       const { apiKey } = req.body;
-      const submittedApiKey = String(apiKey || "").trim();
-      const existingApiKey = String(process.env.BOSTA_API_KEY || "").trim();
+      const submittedApiKey = normalizeSecret(apiKey);
+      const existingIntegration = await (async () => {
+        try {
+          return await loadBostaIntegration(storeId);
+        } catch (error) {
+          if (isSchemaCompatibilityError(error)) {
+            return null;
+          }
+          throw error;
+        }
+      })();
+      const existingApiKey =
+        normalizeSecret(existingIntegration?.api_key) ||
+        normalizeSecret(process.env.BOSTA_API_KEY);
       const nextApiKey =
         /^\*+$/.test(submittedApiKey) && existingApiKey
           ? existingApiKey
@@ -565,6 +796,24 @@ router.post(
 
       await testService.getCities();
 
+      let persistedInDb = false;
+      try {
+        await saveBostaIntegration({
+          storeId,
+          userId: req.user.id,
+          apiKey: nextApiKey,
+          existingIntegration,
+        });
+        persistedInDb = true;
+      } catch (saveError) {
+        if (!isSchemaCompatibilityError(saveError)) {
+          throw saveError;
+        }
+        console.warn(
+          "bosta_integrations table missing, using environment fallback only.",
+        );
+      }
+
       try {
         const db = supabase;
         await db.from("activity_log").insert({
@@ -574,6 +823,8 @@ router.post(
           entity_id: "bosta",
           details: {
             configured: true,
+            source: persistedInDb ? "settings" : "environment",
+            store_id: storeId,
           },
         });
       } catch (logError) {
@@ -581,11 +832,16 @@ router.post(
       }
 
       process.env.BOSTA_API_KEY = nextApiKey;
-      bostaService = testService;
+      environmentBostaService = testService;
+      environmentBostaServiceKey = nextApiKey;
 
       res.json({
         success: true,
-        message: "Bosta configuration validated and activated successfully.",
+        message: persistedInDb
+          ? "Bosta configuration saved and activated successfully."
+          : "Bosta configuration activated. Run migrations to persist it in database.",
+        persisted: persistedInDb,
+        storeId,
       });
     } catch (error) {
       console.error("Failed to save Bosta config:", error);
@@ -607,7 +863,7 @@ router.get(
   requireBostaService,
   async (req, res) => {
     try {
-      const cities = await bostaService.getCities();
+      const cities = await req.bostaService.getCities();
       res.json(extractBostaList(cities));
     } catch (error) {
       console.error("Failed to fetch cities:", error);
@@ -630,7 +886,7 @@ router.get(
   async (req, res) => {
     try {
       const { cityId } = req.params;
-      const zones = await bostaService.getZones(cityId);
+      const zones = await req.bostaService.getZones(cityId);
       res.json(extractBostaList(zones));
     } catch (error) {
       console.error("Failed to fetch zones:", error);
@@ -653,7 +909,7 @@ router.get(
   async (req, res) => {
     try {
       const { zoneId } = req.params;
-      const districts = await bostaService.getDistricts(zoneId);
+      const districts = await req.bostaService.getDistricts(zoneId);
       res.json(extractBostaList(districts));
     } catch (error) {
       console.error("Failed to fetch districts:", error);
@@ -675,7 +931,7 @@ router.post(
   requireBostaService,
   async (req, res) => {
     try {
-      const pricing = await bostaService.getPricing(req.body);
+      const pricing = await req.bostaService.getPricing(req.body);
       res.json(pricing);
     } catch (error) {
       console.error("Failed to get pricing:", error);
@@ -698,7 +954,7 @@ router.post(
   requireBostaService,
   async (req, res) => {
     try {
-      const delivery = await bostaService.createDelivery(req.body);
+      const delivery = await req.bostaService.createDelivery(req.body);
 
       // Log the delivery creation
       const db = supabase;
@@ -742,7 +998,7 @@ router.post(
         });
       }
 
-      const result = await bostaService.createBulkDeliveries(deliveries);
+      const result = await req.bostaService.createBulkDeliveries(deliveries);
 
       // Log bulk delivery creation
       const db = supabase;
@@ -782,7 +1038,7 @@ router.get(
   async (req, res) => {
     try {
       const { trackingNumber } = req.params;
-      const delivery = await bostaService.getDeliveryStatus(trackingNumber);
+      const delivery = await req.bostaService.getDeliveryStatus(trackingNumber);
       res.json(delivery);
     } catch (error) {
       console.error("Failed to get delivery status:", error);
@@ -944,9 +1200,11 @@ router.get(
         );
       }
 
+      const resolvedBosta = await resolveBostaServiceForRequest(req);
+
       // If not found in database, try Bosta's public tracking server first when
       // the business API is unavailable.
-      if (!bostaService) {
+      if (!resolvedBosta?.service) {
         try {
           const publicShipment = await fetchPublicTrackingShipment(trackingNumber);
           return res.json(
@@ -967,7 +1225,7 @@ router.get(
 
       try {
         const bostaDelivery =
-          await bostaService.getDeliveryStatus(trackingNumber);
+          await resolvedBosta.service.getDeliveryStatus(trackingNumber);
         const deliveryState = getBostaDeliveryStateCode(bostaDelivery);
 
         // Return the Bosta API response with expected format
@@ -1061,7 +1319,7 @@ router.post(
   async (req, res) => {
     try {
       const { trackingNumber } = req.params;
-      const result = await bostaService.cancelDelivery(trackingNumber);
+      const result = await req.bostaService.cancelDelivery(trackingNumber);
 
       // Log delivery cancellation
       const db = supabase;
@@ -1098,7 +1356,7 @@ router.post(
   requireBostaService,
   async (req, res) => {
     try {
-      const pickup = await bostaService.createPickupRequest(req.body);
+      const pickup = await req.bostaService.createPickupRequest(req.body);
 
       // Log pickup request creation
       const db = supabase;
@@ -1155,7 +1413,7 @@ router.post(
         typeof order.data === "string" ? JSON.parse(order.data) : order.data;
 
       // Convert Shopify order to Bosta format
-      const bostaOrderData = bostaService.convertShopifyOrderToBosta(
+      const bostaOrderData = req.bostaService.convertShopifyOrderToBosta(
         orderData,
         {
           packageType,
@@ -1165,10 +1423,10 @@ router.post(
       );
 
       // Create delivery with Bosta
-      const delivery = await bostaService.createDelivery(bostaOrderData);
+      const delivery = await req.bostaService.createDelivery(bostaOrderData);
 
       // Save shipment to database
-      await bostaService.saveShipment(orderId, delivery, bostaOrderData, {
+      await req.bostaService.saveShipment(orderId, delivery, bostaOrderData, {
         notes: `Shipped by user ${req.user.id}`,
       });
 
@@ -1224,15 +1482,16 @@ router.post(
  */
 router.post("/webhook", async (req, res) => {
   try {
-    if (!bostaService) {
+    const webhookService = getEnvironmentBostaService();
+    if (!webhookService) {
       console.warn("Bosta webhook received but service not configured");
       return res.status(200).json({ received: true });
     }
 
-    const webhookData = bostaService.processWebhookData(req.body);
+    const webhookData = webhookService.processWebhookData(req.body);
 
     // Update shipment in database
-    await bostaService.updateShipmentFromWebhook(req.body);
+    await webhookService.updateShipmentFromWebhook(req.body);
 
     const db = supabase;
 
