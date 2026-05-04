@@ -46,6 +46,33 @@ const fetchPublicTrackingShipment = async (trackingNumber) => {
   );
 };
 
+const fetchBusinessTrackingSafely = async (service, trackingNumber) => {
+  if (!service) {
+    return null;
+  }
+
+  try {
+    return await service.getDeliveryTracking(trackingNumber);
+  } catch (error) {
+    console.warn(
+      `Bosta business tracking endpoint failed for ${trackingNumber}:`,
+      error.message,
+    );
+    return null;
+  }
+};
+
+const mergeBostaDeliveryPayloads = (delivery, tracking) => {
+  if (!tracking || typeof tracking !== "object") {
+    return delivery;
+  }
+
+  return {
+    ...(delivery && typeof delivery === "object" ? delivery : {}),
+    tracking_response: tracking,
+  };
+};
+
 const isTrackingNotFoundError = (error) => {
   const message = error?.message || "";
   return (
@@ -81,6 +108,13 @@ const normalizeText = (value) =>
   String(value || "")
     .trim()
     .toLowerCase();
+
+const normalizeProductTitle = (value) =>
+  normalizeText(value)
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .replace(/\s*-\s*/g, "-")
+    .replace(/\s+/g, " ");
 
 const normalizeId = (value) => String(value || "").trim();
 const UUID_REGEX =
@@ -406,6 +440,32 @@ const getOrderRevenue = (order = {}) => {
   );
 };
 
+const getOrderShippingCharge = (order = {}) => {
+  const data = parseJsonField(order?.data);
+  const shippingLines = Array.isArray(data?.shipping_lines)
+    ? data.shipping_lines
+    : [];
+  const shippingLinesTotal = shippingLines.reduce(
+    (sum, line) =>
+      sum +
+      toNumber(
+        line?.price ??
+          line?.discounted_price ??
+          line?.price_set?.shop_money?.amount ??
+          line?.discounted_price_set?.shop_money?.amount,
+      ),
+    0,
+  );
+
+  return roundCurrency(
+    data?.current_total_shipping_price_set?.shop_money?.amount ??
+      data?.total_shipping_price_set?.shop_money?.amount ??
+      order?.current_total_shipping_price ??
+      order?.total_shipping_price ??
+      (shippingLinesTotal > 0 ? shippingLinesTotal : 0),
+  );
+};
+
 const getOrderLineItems = (order = {}) => {
   if (Array.isArray(order?.line_items)) {
     return order.line_items;
@@ -517,9 +577,13 @@ const findOrderByTrackingNumber = async ({
     bostaDelivery?.businessReference,
     bostaDelivery?.data?.businessReference,
     bostaDelivery?.bosta_response?.businessReference,
+    bostaDelivery?.tracking_response?.businessReference,
+    bostaDelivery?.tracking_response?.data?.businessReference,
     bostaDelivery?.shopifyOrderId,
     bostaDelivery?.data?.shopifyOrderId,
     bostaDelivery?.bosta_response?.shopifyOrderId,
+    bostaDelivery?.tracking_response?.shopifyOrderId,
+    bostaDelivery?.tracking_response?.data?.shopifyOrderId,
   ].filter(Boolean);
 
   for (const reference of references) {
@@ -583,16 +647,19 @@ const fetchShopifyOrderByReference = async ({
   references = [],
   trackingNumber = "",
 }) => {
-  const rawCandidates = [
-    ...references,
-    trackingNumber,
-    trackingNumber ? `tracking_number:${trackingNumber}` : "",
-    trackingNumber ? `fulfillment_tracking_number:${trackingNumber}` : "",
-  ].filter(Boolean);
+  const exactTrackingNumber = normalizeText(trackingNumber);
   const referenceCandidates = Array.from(
-    new Set(rawCandidates.flatMap(buildOrderReferenceCandidates).filter(Boolean)),
+    new Set(references.flatMap(buildOrderReferenceCandidates).filter(Boolean)),
   );
-  if (referenceCandidates.length === 0) {
+  const trackingSearchCandidates = Array.from(
+    new Set(
+      [
+        trackingNumber ? `tracking_number:${trackingNumber}` : "",
+        trackingNumber ? `fulfillment_tracking_number:${trackingNumber}` : "",
+      ].filter(Boolean),
+    ),
+  );
+  if (referenceCandidates.length === 0 && trackingSearchCandidates.length === 0) {
     return null;
   }
 
@@ -626,6 +693,30 @@ const fetchShopifyOrderByReference = async ({
         );
       }
     }
+
+    for (const searchTerm of trackingSearchCandidates) {
+      try {
+        const matchedOrders = await ShopifyService.searchOrdersFromShopify(
+          accessToken,
+          shop,
+          searchTerm,
+          { limit: 5 },
+        );
+        const exactTrackingMatch = (matchedOrders || []).find((order) =>
+          exactTrackingNumber
+            ? orderHasTrackingNumber(order, exactTrackingNumber)
+            : false,
+        );
+        if (exactTrackingMatch) {
+          return exactTrackingMatch;
+        }
+      } catch (error) {
+        console.warn(
+          `Bosta scanner Shopify tracking search failed for ${searchTerm}:`,
+          error.message,
+        );
+      }
+    }
   }
 
   return null;
@@ -646,6 +737,8 @@ const indexProductsForCostLookup = (products = []) => {
   const byProductId = new Map();
   const byVariantId = new Map();
   const bySku = new Map();
+  const byTitle = new Map();
+  const titleEntries = [];
 
   const remember = (map, key, value) => {
     const normalized = normalizeId(key);
@@ -654,29 +747,113 @@ const indexProductsForCostLookup = (products = []) => {
     }
   };
 
+  const rememberTitle = (title, value) => {
+    const normalizedTitle = normalizeProductTitle(title);
+    if (normalizedTitle && !byTitle.has(normalizedTitle)) {
+      byTitle.set(normalizedTitle, value);
+      titleEntries.push([normalizedTitle, value]);
+    }
+  };
+
   products.forEach((product) => {
     remember(byProductId, product?.shopify_id, product);
     remember(byProductId, product?.id, product);
     remember(bySku, product?.sku, { product, variant: null });
+    rememberTitle(product?.title, { product, variant: null });
 
     getProductVariants(product).forEach((variant) => {
       remember(byVariantId, variant?.id, { product, variant });
       remember(bySku, variant?.sku, { product, variant });
+      rememberTitle(variant?.title, { product, variant });
+      rememberTitle(
+        [product?.title, variant?.title]
+          .filter(
+            (entry) =>
+              entry &&
+              normalizeProductTitle(entry) !== "default title" &&
+              normalizeProductTitle(entry) !== normalizeProductTitle(product?.title),
+          )
+          .join(" - "),
+        { product, variant },
+      );
+      rememberTitle(
+        [product?.title, variant?.title]
+          .filter(
+            (entry) =>
+              entry &&
+              normalizeProductTitle(entry) !== "default title" &&
+              normalizeProductTitle(entry) !== normalizeProductTitle(product?.title),
+          )
+          .join(" "),
+        { product, variant },
+      );
     });
   });
 
-  return { byProductId, byVariantId, bySku };
+  return { byProductId, byVariantId, bySku, byTitle, titleEntries };
+};
+
+const findApproximateTitleMatch = (titleCandidates = [], productIndex) => {
+  for (const candidate of titleCandidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const exactMatch = productIndex.byTitle.get(candidate);
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    const containsMatch = productIndex.titleEntries.find(
+      ([indexedTitle]) =>
+        indexedTitle.includes(candidate) || candidate.includes(indexedTitle),
+    );
+    if (containsMatch?.[1]) {
+      return containsMatch[1];
+    }
+  }
+
+  return null;
 };
 
 const getMatchedProductCost = (item = {}, productIndex) => {
   const productId = normalizeId(item?.product_id);
   const variantId = normalizeId(item?.variant_id);
   const sku = normalizeId(item?.sku);
+  const titleCandidates = [
+    item?.title,
+    item?.name,
+    item?.variant_title,
+    [item?.title, item?.variant_title]
+      .filter(
+        (entry) =>
+          entry &&
+          normalizeProductTitle(entry) !== "default title" &&
+          normalizeProductTitle(entry) !== normalizeProductTitle(item?.title),
+      )
+      .join(" - "),
+    [item?.title, item?.variant_title]
+      .filter(
+        (entry) =>
+          entry &&
+          normalizeProductTitle(entry) !== "default title" &&
+          normalizeProductTitle(entry) !== normalizeProductTitle(item?.title),
+      )
+      .join(" "),
+  ]
+    .map(normalizeProductTitle)
+    .filter(Boolean);
   const variantMatch = productIndex.byVariantId.get(variantId);
   const skuMatch = productIndex.bySku.get(sku);
   const productMatch = productIndex.byProductId.get(productId);
-  const product = variantMatch?.product || skuMatch?.product || productMatch;
-  const variant = variantMatch?.variant || skuMatch?.variant || null;
+  const titleMatch = findApproximateTitleMatch(titleCandidates, productIndex);
+  const product =
+    variantMatch?.product ||
+    skuMatch?.product ||
+    productMatch ||
+    titleMatch?.product;
+  const variant =
+    variantMatch?.variant || skuMatch?.variant || titleMatch?.variant || null;
 
   return {
     costPrice: toNumber(
@@ -710,10 +887,13 @@ const calculateOrderScanTotals = async (req, order = {}, shipment = {}) => {
   );
 
   const shipmentShippingCost = toNumber(shipment?.expected_shipping_cost);
+  const orderShippingCharge = getOrderShippingCharge(order);
   const shippingCost =
     shipmentShippingCost > 0
       ? shipmentShippingCost
-      : totals.productShippingCost;
+      : totals.productShippingCost > 0
+        ? totals.productShippingCost
+        : orderShippingCharge;
   const revenue = getOrderRevenue(order);
   const totalCost = roundCurrency(totals.totalCost);
   const netProfit = roundCurrency(revenue - totalCost);
@@ -752,12 +932,15 @@ const getBostaOrderType = (delivery = {}) => {
   return type && typeof type === "object" ? type.code || type.value : type;
 };
 
+const getFirstPositiveAmount = (values = []) =>
+  values.map(toNumber).find((value) => value > 0) || 0;
+
 const getPricingAmount = (pricing = {}) => {
   if (!pricing || typeof pricing !== "object") {
     return 0;
   }
 
-  const candidates = [
+  return getFirstPositiveAmount([
     pricing?.priceAfterVat,
     pricing?.totalAfterVat,
     pricing?.totalWithVat,
@@ -765,9 +948,7 @@ const getPricingAmount = (pricing = {}) => {
     pricing?.total,
     pricing?.priceBeforeVat,
     pricing?.shippingFee,
-  ].map(toNumber);
-
-  return candidates.find((value) => value > 0) || 0;
+  ]);
 };
 
 const getPricingAmountFromLogs = (delivery = {}) => {
@@ -792,18 +973,28 @@ const getPricingAmountFromLogs = (delivery = {}) => {
   return 0;
 };
 
-const SHIPPING_AMOUNT_KEY_HINTS = [
+const SHIPPING_TOTAL_AMOUNT_KEY_HINTS = [
+  "estimateddues",
+  "estimatedbostadues",
+  "bostadues",
+  "amountdue",
+  "amounttobepaid",
+  "feesaftervat",
+  "netfees",
+  "priceaftervat",
+  "totalaftervat",
+  "totalwithvat",
+  "amountaftervat",
+];
+
+const SHIPPING_BASE_AMOUNT_KEY_HINTS = [
   "shipping",
   "shipmentfees",
   "shipment_fees",
   "deliveryfees",
   "delivery_fees",
   "dues",
-  "estimateddues",
-  "feesaftervat",
-  "netfees",
-  "priceaftervat",
-  "totalaftervat",
+  "fees",
 ];
 
 const SHIPPING_AMOUNT_EXCLUDED_KEY_HINTS = [
@@ -841,15 +1032,21 @@ const getDeepShippingAmount = (payload = {}) => {
       const normalizedPath = nextPath.join(".").toLowerCase();
       const flatPath = normalizedPath.replace(/[^a-z0-9]/g, "");
       const numericValue = toNumber(child);
-      const hasShippingHint = SHIPPING_AMOUNT_KEY_HINTS.some(
+      const totalHint = SHIPPING_TOTAL_AMOUNT_KEY_HINTS.some(
+        (hint) => normalizedPath.includes(hint) || flatPath.includes(hint),
+      );
+      const baseHint = SHIPPING_BASE_AMOUNT_KEY_HINTS.some(
         (hint) => normalizedPath.includes(hint) || flatPath.includes(hint),
       );
       const hasExcludedHint = SHIPPING_AMOUNT_EXCLUDED_KEY_HINTS.some(
         (hint) => normalizedPath.includes(hint) || flatPath.includes(hint),
       );
 
-      if (numericValue > 0 && hasShippingHint && !hasExcludedHint) {
-        candidates.push(numericValue);
+      if (numericValue > 0 && (totalHint || baseHint) && !hasExcludedHint) {
+        candidates.push({
+          amount: numericValue,
+          score: totalHint ? 2 : 1,
+        });
       }
 
       if (child && typeof child === "object") {
@@ -863,15 +1060,40 @@ const getDeepShippingAmount = (payload = {}) => {
     return 0;
   }
 
-  return candidates.reduce(
-    (lowestPositive, amount) =>
-      amount > 0 && amount < lowestPositive ? amount : lowestPositive,
-    candidates[0],
-  );
+  candidates.sort((left, right) => {
+    if (right.score !== left.score) {
+      return right.score - left.score;
+    }
+    return right.amount - left.amount;
+  });
+
+  return candidates[0].amount;
 };
+
+const getDirectBostaDuesAmount = (delivery = {}) =>
+  getFirstPositiveAmount([
+    delivery?.estimatedDues,
+    delivery?.estimated_dues,
+    delivery?.estimatedBostaDues,
+    delivery?.estimated_bosta_dues,
+    delivery?.bostaDues,
+    delivery?.bosta_dues,
+    delivery?.dues,
+    delivery?.amountDue,
+    delivery?.amount_due,
+    delivery?.amountToBePaid,
+    delivery?.amount_to_be_paid,
+    delivery?.shipmentFees,
+    delivery?.shipment_fees,
+    delivery?.expectedShippingCost,
+    delivery?.expected_shipping_cost,
+    delivery?.shippingCost,
+    delivery?.shipping_cost,
+  ]);
 
 const getBostaShippingCost = (delivery = {}) => {
   const prioritizedCost =
+    getDirectBostaDuesAmount(delivery) ||
     getPricingAmount(delivery?.pricing) ||
     getPricingAmount(delivery?.pricing?.after) ||
     getPricingAmount(delivery?.pricing?.before) ||
@@ -882,14 +1104,7 @@ const getBostaShippingCost = (delivery = {}) => {
     return prioritizedCost;
   }
 
-  return toNumber(
-    delivery?.estimatedDues ??
-      delivery?.amountToBeCollected ??
-      delivery?.dues ??
-      delivery?.shipmentFees ??
-      delivery?.expectedShippingCost ??
-      delivery?.shippingCost,
-  );
+  return 0;
 };
 
 const enrichShipmentWithOrderData = async ({
@@ -912,9 +1127,13 @@ const enrichShipmentWithOrderData = async ({
       bostaDelivery?.businessReference,
       bostaDelivery?.data?.businessReference,
       bostaDelivery?.bosta_response?.businessReference,
+      bostaDelivery?.tracking_response?.businessReference,
+      bostaDelivery?.tracking_response?.data?.businessReference,
       bostaDelivery?.shopifyOrderId,
       bostaDelivery?.data?.shopifyOrderId,
       bostaDelivery?.bosta_response?.shopifyOrderId,
+      bostaDelivery?.tracking_response?.shopifyOrderId,
+      bostaDelivery?.tracking_response?.data?.shopifyOrderId,
     ].filter(Boolean);
 
     const liveShopifyOrder = await fetchShopifyOrderByReference({
@@ -959,18 +1178,26 @@ const persistShipmentSnapshot = async ({
     return;
   }
 
+  const expectedShippingCost = roundCurrency(
+    toNumber(shipment?.expected_shipping_cost),
+  );
   const updatePayload = {
-    expected_shipping_cost: roundCurrency(
-      toNumber(shipment?.expected_shipping_cost || shipment?.shipping_cost),
-    ),
     delivery_state: toNumber(shipment?.delivery_state),
     delivery_state_label: shipment?.delivery_state_label || null,
     business_reference: shipment?.business_reference || null,
     updated_at: new Date().toISOString(),
   };
 
+  if (expectedShippingCost > 0) {
+    updatePayload.expected_shipping_cost = expectedShippingCost;
+  }
+
   if (isUuid(shipment?.order_id)) {
     updatePayload.order_id = shipment.order_id;
+  }
+
+  if (shipment?.bosta_response && typeof shipment.bosta_response === "object") {
+    updatePayload.bosta_response = shipment.bosta_response;
   }
 
   // Keep data lean and avoid writing undefined values
@@ -1404,6 +1631,7 @@ router.get(
       const { trackingNumber } = validation;
 
       const db = supabase;
+      let resolvedBosta = null;
 
       // First, try to get from database
       const { data: shipment, error } = await db
@@ -1415,6 +1643,7 @@ router.get(
       if (shipment && !error) {
         const parsedStoredResponse = parseJsonField(shipment?.bosta_response);
         const refreshedShipment = { ...shipment };
+        let bostaPayloadForEnrichment = parsedStoredResponse;
 
         if (toNumber(refreshedShipment.expected_shipping_cost) <= 0) {
           const derivedShippingCost = getBostaShippingCost(parsedStoredResponse);
@@ -1424,11 +1653,42 @@ router.get(
           }
         }
 
+        if (toNumber(refreshedShipment.expected_shipping_cost) <= 0) {
+          resolvedBosta = await resolveBostaServiceForRequest(req);
+          if (resolvedBosta?.service) {
+            try {
+              const freshDelivery =
+                await resolvedBosta.service.getDeliveryStatus(trackingNumber);
+              const freshTracking = await fetchBusinessTrackingSafely(
+                resolvedBosta.service,
+                trackingNumber,
+              );
+              const freshPayload = mergeBostaDeliveryPayloads(
+                freshDelivery,
+                freshTracking,
+              );
+              const freshShippingCost = getBostaShippingCost(freshPayload);
+              bostaPayloadForEnrichment = freshPayload;
+              refreshedShipment.bosta_response = freshPayload;
+
+              if (freshShippingCost > 0) {
+                refreshedShipment.expected_shipping_cost =
+                  roundCurrency(freshShippingCost);
+              }
+            } catch (freshError) {
+              console.warn(
+                "Bosta scanner stored shipment refresh failed:",
+                freshError.message,
+              );
+            }
+          }
+        }
+
         const enrichedShipment = await enrichShipmentWithOrderData({
           req,
           trackingNumber,
           shipment: refreshedShipment,
-          bostaDelivery: parsedStoredResponse,
+          bostaDelivery: bostaPayloadForEnrichment,
         });
 
         await persistShipmentSnapshot({
@@ -1439,7 +1699,7 @@ router.get(
         return res.json(enrichedShipment);
       }
 
-      const resolvedBosta = await resolveBostaServiceForRequest(req);
+      resolvedBosta = resolvedBosta || (await resolveBostaServiceForRequest(req));
 
       // If not found in database, try Bosta's public tracking server first when
       // the business API is unavailable.
@@ -1465,6 +1725,14 @@ router.get(
       try {
         const bostaDelivery =
           await resolvedBosta.service.getDeliveryStatus(trackingNumber);
+        const bostaTracking = await fetchBusinessTrackingSafely(
+          resolvedBosta.service,
+          trackingNumber,
+        );
+        const mergedBostaPayload = mergeBostaDeliveryPayloads(
+          bostaDelivery,
+          bostaTracking,
+        );
         const deliveryState = getBostaDeliveryStateCode(bostaDelivery);
 
         // Return the Bosta API response with expected format
@@ -1475,7 +1743,7 @@ router.get(
           bosta_order_type: getBostaOrderType(bostaDelivery),
           delivery_state: deliveryState,
           delivery_state_label: getBostaDeliveryStateLabel(bostaDelivery),
-          expected_shipping_cost: getBostaShippingCost(bostaDelivery),
+          expected_shipping_cost: getBostaShippingCost(mergedBostaPayload),
           cod_amount: bostaDelivery.cod || 0,
           revenue: toNumber(bostaDelivery.cod),
           is_delivered: BostaService.isDeliveredState(
@@ -1492,7 +1760,7 @@ router.get(
             null,
           created_at: bostaDelivery.createdAt || null,
           updated_at: bostaDelivery.updatedAt || null,
-          bosta_response: bostaDelivery,
+          bosta_response: mergedBostaPayload,
         };
 
         return res.json(
@@ -1500,7 +1768,7 @@ router.get(
             req,
             trackingNumber,
             shipment: formattedShipment,
-            bostaDelivery,
+            bostaDelivery: mergedBostaPayload,
           }),
         );
       } catch (bostaError) {

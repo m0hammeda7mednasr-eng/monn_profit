@@ -70,12 +70,15 @@ const toNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const getFirstPositiveAmount = (values = []) =>
+  values.map(toNumber).find((value) => value > 0) || 0;
+
 const getPricingAmount = (pricing = {}) => {
   if (!pricing || typeof pricing !== "object") {
     return 0;
   }
 
-  const candidates = [
+  return getFirstPositiveAmount([
     pricing?.priceAfterVat,
     pricing?.totalAfterVat,
     pricing?.totalWithVat,
@@ -83,9 +86,7 @@ const getPricingAmount = (pricing = {}) => {
     pricing?.total,
     pricing?.priceBeforeVat,
     pricing?.shippingFee,
-  ].map(toNumber);
-
-  return candidates.find((value) => value > 0) || 0;
+  ]);
 };
 
 const getPricingAmountFromLogs = (delivery = {}) => {
@@ -110,18 +111,28 @@ const getPricingAmountFromLogs = (delivery = {}) => {
   return 0;
 };
 
-const SHIPPING_AMOUNT_KEY_HINTS = [
+const SHIPPING_TOTAL_AMOUNT_KEY_HINTS = [
+  "estimateddues",
+  "estimatedbostadues",
+  "bostadues",
+  "amountdue",
+  "amounttobepaid",
+  "feesaftervat",
+  "netfees",
+  "priceaftervat",
+  "totalaftervat",
+  "totalwithvat",
+  "amountaftervat",
+];
+
+const SHIPPING_BASE_AMOUNT_KEY_HINTS = [
   "shipping",
   "shipmentfees",
   "shipment_fees",
   "deliveryfees",
   "delivery_fees",
   "dues",
-  "estimateddues",
-  "feesaftervat",
-  "netfees",
-  "priceaftervat",
-  "totalaftervat",
+  "fees",
 ];
 
 const SHIPPING_AMOUNT_EXCLUDED_KEY_HINTS = [
@@ -159,15 +170,21 @@ const getDeepShippingAmount = (payload = {}) => {
       const normalizedPath = nextPath.join(".").toLowerCase();
       const flatPath = normalizedPath.replace(/[^a-z0-9]/g, "");
       const numericValue = toNumber(child);
-      const hasShippingHint = SHIPPING_AMOUNT_KEY_HINTS.some(
+      const totalHint = SHIPPING_TOTAL_AMOUNT_KEY_HINTS.some(
+        (hint) => normalizedPath.includes(hint) || flatPath.includes(hint),
+      );
+      const baseHint = SHIPPING_BASE_AMOUNT_KEY_HINTS.some(
         (hint) => normalizedPath.includes(hint) || flatPath.includes(hint),
       );
       const hasExcludedHint = SHIPPING_AMOUNT_EXCLUDED_KEY_HINTS.some(
         (hint) => normalizedPath.includes(hint) || flatPath.includes(hint),
       );
 
-      if (numericValue > 0 && hasShippingHint && !hasExcludedHint) {
-        candidates.push(numericValue);
+      if (numericValue > 0 && (totalHint || baseHint) && !hasExcludedHint) {
+        candidates.push({
+          amount: numericValue,
+          score: totalHint ? 2 : 1,
+        });
       }
 
       if (child && typeof child === "object") {
@@ -181,15 +198,40 @@ const getDeepShippingAmount = (payload = {}) => {
     return 0;
   }
 
-  return candidates.reduce(
-    (lowestPositive, amount) =>
-      amount > 0 && amount < lowestPositive ? amount : lowestPositive,
-    candidates[0],
-  );
+  candidates.sort((left, right) => {
+    if (right.score !== left.score) {
+      return right.score - left.score;
+    }
+    return right.amount - left.amount;
+  });
+
+  return candidates[0].amount;
 };
+
+const getDirectBostaDuesAmount = (delivery = {}) =>
+  getFirstPositiveAmount([
+    delivery?.estimatedDues,
+    delivery?.estimated_dues,
+    delivery?.estimatedBostaDues,
+    delivery?.estimated_bosta_dues,
+    delivery?.bostaDues,
+    delivery?.bosta_dues,
+    delivery?.dues,
+    delivery?.amountDue,
+    delivery?.amount_due,
+    delivery?.amountToBePaid,
+    delivery?.amount_to_be_paid,
+    delivery?.shipmentFees,
+    delivery?.shipment_fees,
+    delivery?.expectedShippingCost,
+    delivery?.expected_shipping_cost,
+    delivery?.shippingCost,
+    delivery?.shipping_cost,
+  ]);
 
 const getBostaShippingCost = (delivery = {}) => {
   const prioritizedCost =
+    getDirectBostaDuesAmount(delivery) ||
     getPricingAmount(delivery?.pricing) ||
     getPricingAmount(delivery?.pricing?.after) ||
     getPricingAmount(delivery?.pricing?.before) ||
@@ -200,14 +242,7 @@ const getBostaShippingCost = (delivery = {}) => {
     return prioritizedCost;
   }
 
-  return toNumber(
-    delivery?.estimatedDues ??
-      delivery?.amountToBeCollected ??
-      delivery?.dues ??
-      delivery?.shipmentFees ??
-      delivery?.expectedShippingCost ??
-      delivery?.shippingCost,
-  );
+  return 0;
 };
 
 const formatPublicTrackingShipment = (publicTracking, trackingNumber) => {
@@ -271,6 +306,54 @@ const fetchPublicTrackingShipment = async (trackingNumber) => {
   }
 
   return formatPublicTrackingShipment(data, trackingNumber);
+};
+
+const fetchBostaTrackingDetailsSafely = async (trackingNumber, apiKey) => {
+  try {
+    const response = await fetch(
+      `https://app.bosta.co/api/v2/deliveries/${encodeURIComponent(
+        trackingNumber,
+      )}/tracking`,
+      {
+        headers: {
+          Authorization: apiKey,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+    const text = await response.text();
+    let data = null;
+
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      throw new Error("Bosta tracking details returned a non-JSON response");
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        data?.message ||
+          data?.error ||
+          `Bosta tracking details returned ${response.status}`,
+      );
+    }
+
+    return data;
+  } catch (error) {
+    console.warn("Could not fetch Bosta business tracking details:", error.message);
+    return null;
+  }
+};
+
+const mergeBostaDeliveryPayloads = (delivery, tracking) => {
+  if (!tracking || typeof tracking !== "object") {
+    return delivery;
+  }
+
+  return {
+    ...(delivery && typeof delivery === "object" ? delivery : {}),
+    tracking_response: tracking,
+  };
 };
 
 export default async function handler(req, res) {
@@ -372,6 +455,14 @@ export default async function handler(req, res) {
     }
 
     console.log("Successfully fetched from Bosta API");
+    const bostaTrackingData = await fetchBostaTrackingDetailsSafely(
+      trackingNumber,
+      bostaApiKey,
+    );
+    const mergedBostaData = mergeBostaDeliveryPayloads(
+      bostaData,
+      bostaTrackingData,
+    );
 
     // Format response to match our schema
     const shipment = {
@@ -381,7 +472,7 @@ export default async function handler(req, res) {
       bosta_order_type: bostaData.type,
       delivery_state: bostaData.state?.value || 0,
       delivery_state_label: bostaData.state?.label || "Unknown",
-      expected_shipping_cost: getBostaShippingCost(bostaData),
+      expected_shipping_cost: getBostaShippingCost(mergedBostaData),
       cod_amount: bostaData.cod || 0,
       is_delivered: bostaData.state?.value === 40,
       created_at: bostaData.createdAt,
@@ -389,6 +480,7 @@ export default async function handler(req, res) {
       receiver: bostaData.receiver,
       dropOffAddress: bostaData.dropOffAddress,
       notes: bostaData.notes,
+      bosta_response: mergedBostaData,
     };
 
     return res.status(200).json(shipment);

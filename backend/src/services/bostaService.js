@@ -251,6 +251,19 @@ class BostaService {
   }
 
   /**
+   * Get authenticated tracking details by tracking number.
+   * Bosta's official SDK exposes this as GET /deliveries/:tracking/tracking.
+   */
+  async getDeliveryTracking(trackingNumber) {
+    const normalizedTrackingNumber = ensureValidTrackingNumber(trackingNumber);
+    const endpoint = `/deliveries/${normalizedTrackingNumber}/tracking`;
+
+    return await this.makeRequest(endpoint, {
+      method: "GET",
+    });
+  }
+
+  /**
    * Get public shipment tracking from Bosta's tracking server.
    * This endpoint is what Bosta's public tracking page uses and does not require
    * a business API key, so it is a useful fallback for customer-facing scans.

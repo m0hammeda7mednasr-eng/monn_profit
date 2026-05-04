@@ -338,6 +338,17 @@ describe("BostaService", () => {
       );
     });
 
+    test("getDeliveryTracking should call authenticated tracking endpoint", async () => {
+      await bostaService.getDeliveryTracking("TRK-123");
+
+      expect(fetch).toHaveBeenCalledWith(
+        "https://app.bosta.co/api/v2/deliveries/TRK-123/tracking",
+        expect.objectContaining({
+          method: "GET",
+        }),
+      );
+    });
+
     test("getDeliveryStatus should fall back to legacy Bosta API", async () => {
       fetch
         .mockResolvedValueOnce({
