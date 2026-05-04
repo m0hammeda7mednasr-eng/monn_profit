@@ -372,6 +372,28 @@ describe("BostaService", () => {
       expect(result.businessReference).toBe("#1001");
     });
 
+    test("getDeliveryStatus should normalize tracking number input", async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ trackingNumber: "TRK123" }),
+      });
+
+      await bostaService.getDeliveryStatus("  TRK 123 \n ");
+
+      expect(fetch).toHaveBeenCalledWith(
+        "https://app.bosta.co/api/v2/deliveries/TRK123",
+        expect.objectContaining({
+          method: "GET",
+        }),
+      );
+    });
+
+    test("getDeliveryStatus should reject legacy demo tracking values", async () => {
+      await expect(bostaService.getDeliveryStatus("DEMO123")).rejects.toThrow(
+        "Demo tracking is disabled. Use a real Bosta tracking number instead of demo data.",
+      );
+    });
+
     test("cancelDelivery should call correct endpoint", async () => {
       await bostaService.cancelDelivery("TRK-123");
 

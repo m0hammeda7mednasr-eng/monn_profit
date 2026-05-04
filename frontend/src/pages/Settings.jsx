@@ -517,6 +517,11 @@ function BostaConfiguration() {
   const [bostaConfig, setBostaConfig] = useState({
     apiKey: "",
   });
+  const [configMeta, setConfigMeta] = useState({
+    maskedApiKey: "",
+    source: "",
+    storeId: "",
+  });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
@@ -533,7 +538,19 @@ function BostaConfiguration() {
         setBostaConfig({
           apiKey: data.apiKey || "",
         });
+        setConfigMeta({
+          maskedApiKey: data.apiKey || "",
+          source: data.source || "",
+          storeId: data.storeId || "",
+        });
         setHasConfig(true);
+      } else {
+        setConfigMeta({
+          maskedApiKey: "",
+          source: "",
+          storeId: "",
+        });
+        setHasConfig(false);
       }
     } catch (error) {
       console.error("Failed to load Bosta config:", error);
@@ -562,6 +579,7 @@ function BostaConfiguration() {
       });
 
       setHasConfig(true);
+      await loadBostaConfig();
       setMessage({
         type: "success",
         text: "Bosta configuration saved successfully!",
@@ -639,6 +657,17 @@ function BostaConfiguration() {
             <p className="text-green-700 text-sm">
               Ready to create shipments and track deliveries
             </p>
+            {configMeta.maskedApiKey && (
+              <p className="text-green-700 text-xs mt-1 font-mono">
+                Key: {configMeta.maskedApiKey}
+              </p>
+            )}
+            {(configMeta.source || configMeta.storeId) && (
+              <p className="text-green-700 text-xs mt-1">
+                Source: {configMeta.source || "unknown"}
+                {configMeta.storeId ? ` • Store: ${configMeta.storeId}` : ""}
+              </p>
+            )}
           </div>
         </div>
       )}

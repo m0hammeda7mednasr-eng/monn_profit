@@ -5,6 +5,7 @@
  */
 
 import { supabase } from "../supabaseClient.js";
+import { ensureValidTrackingNumber } from "../helpers/bostaTracking.js";
 
 const DEFAULT_BOSTA_API_BASE_URL = "https://app.bosta.co/api/v2";
 const DEFAULT_BOSTA_LEGACY_API_BASE_URL = "https://app.bosta.co/api/v0";
@@ -235,7 +236,8 @@ class BostaService {
    * Get delivery status by tracking number
    */
   async getDeliveryStatus(trackingNumber) {
-    const endpoint = `/deliveries/${trackingNumber}`;
+    const normalizedTrackingNumber = ensureValidTrackingNumber(trackingNumber);
+    const endpoint = `/deliveries/${normalizedTrackingNumber}`;
 
     try {
       return await this.makeRequest(endpoint, {
@@ -260,10 +262,7 @@ class BostaService {
       timeoutMs = process.env.BOSTA_TRACKING_TIMEOUT_MS,
     } = {},
   ) {
-    const normalizedTrackingNumber = String(trackingNumber || "").trim();
-    if (!normalizedTrackingNumber) {
-      throw new Error("Tracking number is required");
-    }
+    const normalizedTrackingNumber = ensureValidTrackingNumber(trackingNumber);
 
     const parsedTimeoutMs = parsePositiveInteger(timeoutMs, 15000);
     const controller = new AbortController();
@@ -322,7 +321,8 @@ class BostaService {
    * Cancel delivery
    */
   async cancelDelivery(trackingNumber) {
-    const endpoint = `/deliveries/${trackingNumber}/cancel`;
+    const normalizedTrackingNumber = ensureValidTrackingNumber(trackingNumber);
+    const endpoint = `/deliveries/${normalizedTrackingNumber}/cancel`;
 
     return await this.makeRequest(endpoint, {
       method: "POST",
@@ -619,12 +619,13 @@ class BostaService {
    * Get shipment by tracking number
    */
   async getShipment(trackingNumber) {
+    const normalizedTrackingNumber = ensureValidTrackingNumber(trackingNumber);
     const db = supabase;
 
     const { data, error } = await db
       .from("bosta_shipments")
       .select("*")
-      .eq("tracking_number", trackingNumber)
+      .eq("tracking_number", normalizedTrackingNumber)
       .single();
 
     if (error && error.code !== "PGRST116") {

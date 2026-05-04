@@ -5,6 +5,32 @@ import { useLocale } from "../context/LocaleContext";
 import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
 import { formatCurrency } from "../utils/helpers";
+import {
+  isDemoTrackingNumber,
+  normalizeTrackingNumber,
+} from "../utils/bostaTracking";
+
+const parseAmount = (value) => {
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const getFallbackOrderCost = (order) =>
+  order.line_items?.reduce((sum, item) => {
+    const cost = parseFloat(item.cost_price || 0);
+    const quantity = parseInt(item.quantity || 0, 10);
+    return sum + cost * quantity;
+  }, 0) || 0;
+
+const extractFetchErrorMessage = async (response) => {
+  try {
+    const data = await response.json();
+    return data?.message || data?.error || `HTTP ${response.status}`;
+  } catch {
+    const text = await response.text();
+    return text || `HTTP ${response.status}`;
+  }
+};
 
 export default function BostaScanner() {
   const { select } = useLocale();
@@ -26,11 +52,23 @@ export default function BostaScanner() {
 
   const handleScan = async (e) => {
     e.preventDefault();
+    const trimmedBarcode = normalizeTrackingNumber(barcode);
 
-    if (!barcode.trim()) {
+    if (!trimmedBarcode) {
       setError(
         select("من فضلك أدخل رقم التتبع", "Please enter tracking number"),
       );
+      return;
+    }
+
+    if (isDemoTrackingNumber(trimmedBarcode)) {
+      setError(
+        select(
+          "تم إيقاف أرقام التتبع التجريبية. استخدم رقم بوسطة حقيقي.",
+          "Demo tracking is disabled. Use a real Bosta tracking number.",
+        ),
+      );
+      setBarcode(trimmedBarcode);
       return;
     }
 
@@ -38,14 +76,12 @@ export default function BostaScanner() {
     setError("");
 
     try {
-      // Handle demo tracking numbers locally for faster testing
-      const demoTrackingNumbers = ["2695867962", "2685887962"];
-      const trimmedBarcode = barcode.trim();
+      // Legacy demo shortcut remains intentionally unreachable while the rest
+      // of the scanner now resolves against real Bosta data only.
 
-      if (
-        trimmedBarcode.toUpperCase().startsWith("DEMO") ||
-        demoTrackingNumbers.includes(trimmedBarcode)
-      ) {
+      /*
+      if (false) {
+        const demoTrackingNumbers = [];
         const demoShipment = {
           tracking_number: trimmedBarcode,
           delivery_state_label: select("تم التوصيل", "Delivered"),
@@ -90,6 +126,7 @@ export default function BostaScanner() {
         return;
       }
 
+      */
       // Get shipment details - try backend first, then Vercel function as fallback
       let shipment;
       try {
@@ -103,12 +140,12 @@ export default function BostaScanner() {
             `/api/bosta-shipment?trackingNumber=${trimmedBarcode}`,
           );
           if (!vercelResponse.ok) {
-            throw new Error(`HTTP ${vercelResponse.status}`);
+            throw new Error(await extractFetchErrorMessage(vercelResponse));
           }
           shipment = await vercelResponse.json();
         } catch (vercelError) {
           console.error("Both backend and Vercel function failed");
-          throw apiError; // Re-throw original error
+          throw vercelError?.message ? vercelError : apiError;
         }
       }
 
@@ -118,10 +155,6 @@ export default function BostaScanner() {
         return;
       }
 
-      const parseAmount = (value) => {
-        const parsed = parseFloat(value);
-        return Number.isFinite(parsed) ? parsed : 0;
-      };
       let order = null;
       let totalCost = parseAmount(shipment.total_cost);
       let revenue = parseAmount(shipment.revenue);
@@ -143,12 +176,7 @@ export default function BostaScanner() {
 
           // Calculate costs only as a fallback. The Bosta route now returns
           // enriched totals when it can match the tracking number to an order.
-          const fallbackTotalCost =
-            order.line_items?.reduce((sum, item) => {
-              const cost = parseFloat(item.cost_price || 0);
-              const quantity = parseInt(item.quantity || 0);
-              return sum + cost * quantity;
-            }, 0) || 0;
+          const fallbackTotalCost = getFallbackOrderCost(order);
 
           if (revenue <= 0) {
             revenue = parseAmount(order.total_price);
@@ -221,7 +249,8 @@ export default function BostaScanner() {
       }
     } catch (err) {
       console.error("Error scanning barcode:", err);
-      const errorMsg = err.response?.data?.message || err.response?.data?.error;
+      const errorMsg =
+        err.response?.data?.message || err.response?.data?.error || err.message;
       setError(
         errorMsg ||
           select("فشل في جلب بيانات الشحنة", "Failed to fetch shipment data"),
@@ -333,7 +362,7 @@ export default function BostaScanner() {
 
               <button
                 type="submit"
-                disabled={loading || !barcode.trim()}
+                disabled={loading || !normalizeTrackingNumber(barcode)}
                 className="w-full rounded-xl bg-sky-600 px-6 py-3 font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading

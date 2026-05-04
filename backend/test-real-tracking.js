@@ -4,14 +4,19 @@ import BostaService from "./src/services/bostaService.js";
 
 async function testRealTracking() {
   const trackingNumbers = [
-    "2695687962",
-    "5767771138",
-    "2338863853",
-    "5456047775",
-    "4485796608",
-    "8418277341",
-    "9732408513",
+    ...process.argv.slice(2),
+    ...String(process.env.BOSTA_TEST_TRACKING_NUMBERS || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
   ];
+
+  if (trackingNumbers.length === 0) {
+    console.error(
+      "Provide real tracking numbers via CLI args or `BOSTA_TEST_TRACKING_NUMBERS=123,456`.",
+    );
+    process.exit(1);
+  }
 
   console.log("🔍 Testing Real Bosta Tracking Numbers");
   console.log("=".repeat(60));

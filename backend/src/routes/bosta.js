@@ -9,6 +9,11 @@ import { authenticateToken } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { supabase } from "../supabaseClient.js";
 import { Order, Product, getAccessibleStoreIds } from "../models/index.js";
+import {
+  getTrackingNumberValidationError,
+  isDemoTrackingNumber,
+  normalizeTrackingNumber,
+} from "../helpers/bostaTracking.js";
 
 const router = express.Router();
 
@@ -79,6 +84,30 @@ const normalizeText = (value) =>
 const normalizeId = (value) => String(value || "").trim();
 
 const normalizeSecret = (value) => String(value || "").trim();
+
+const getTrackingValidationResponse = (value, options) => {
+  const trackingNumber = normalizeTrackingNumber(value);
+  const validationError = getTrackingNumberValidationError(
+    trackingNumber,
+    options,
+  );
+
+  if (!validationError) {
+    return {
+      trackingNumber,
+      status: 200,
+      error: "",
+      message: "",
+    };
+  }
+
+  return {
+    trackingNumber,
+    status: isDemoTrackingNumber(trackingNumber) ? 410 : 400,
+    error: trackingNumber ? "Demo tracking disabled" : "Tracking number is required",
+    message: validationError,
+  };
+};
 
 const maskSecret = (value) => {
   const normalized = normalizeSecret(value);
@@ -1037,7 +1066,17 @@ router.get(
   requireBostaService,
   async (req, res) => {
     try {
-      const { trackingNumber } = req.params;
+      const validation = getTrackingValidationResponse(
+        req.params?.trackingNumber,
+      );
+      if (validation.status !== 200) {
+        return res.status(validation.status).json({
+          error: validation.error,
+          message: validation.message,
+        });
+      }
+
+      const { trackingNumber } = validation;
       const delivery = await req.bostaService.getDeliveryStatus(trackingNumber);
       res.json(delivery);
     } catch (error) {
@@ -1052,47 +1091,14 @@ router.get(
 
 /**
  * GET /api/bosta/demo-shipment
- * Get a demo shipment for testing the scanner
+ * Legacy disabled demo endpoint kept for compatibility.
  */
 router.get("/demo-shipment", authenticateToken, async (req, res) => {
-  try {
-    // Return a demo shipment for testing
-    const demoShipment = {
-      tracking_number: "DEMO123456789",
-      delivery_id: "demo_delivery_001",
-      order_id: null,
-      bosta_order_type: 10,
-      delivery_state: 40, // Delivered
-      delivery_state_label: "Delivered",
-      expected_shipping_cost: 50,
-      cod_amount: 500,
-      is_delivered: true,
-      package_type: "SMALL",
-      created_at: new Date().toISOString(),
-      bosta_response: {
-        _id: "demo_delivery_001",
-        trackingNumber: "DEMO123456789",
-        state: 40,
-        type: 10,
-        cod: 500,
-      },
-    };
-
-    res.json({
-      message: "This is a demo shipment for testing the scanner",
-      shipment: demoShipment,
-      instructions: {
-        en: "Use tracking number 'DEMO123456789' in the scanner to test",
-        ar: "استخدم رقم التتبع 'DEMO123456789' في السكانر للاختبار",
-      },
-    });
-  } catch (error) {
-    console.error("Failed to generate demo shipment:", error);
-    res.status(500).json({
-      error: "Failed to generate demo shipment",
-      message: error.message,
-    });
-  }
+  return res.status(410).json({
+    error: "Demo shipment endpoint disabled",
+    message:
+      "Use a real Bosta tracking number or an existing shipment from the database.",
+  });
 });
 
 /**
@@ -1142,32 +1148,17 @@ router.get(
   requirePermission("can_view_orders"),
   async (req, res) => {
     try {
-      const { trackingNumber } = req.params;
-
-      // Handle demo tracking numbers for testing
-      const demoTrackingNumbers = ["2695867962", "2685887962"];
-      if (
-        trackingNumber.toUpperCase().startsWith("DEMO") ||
-        demoTrackingNumbers.includes(trackingNumber)
-      ) {
-        const demoShipment = {
-          tracking_number: trackingNumber,
-          delivery_id: demoTrackingNumbers.includes(trackingNumber)
-            ? "real_delivery_001"
-            : "demo_delivery_001",
-          order_id: null,
-          bosta_order_type: 10,
-          delivery_state: 40,
-          delivery_state_label: "Delivered",
-          expected_shipping_cost: 50,
-          cod_amount: demoTrackingNumbers.includes(trackingNumber)
-            ? 699.55
-            : 500,
-          is_delivered: true,
-          created_at: new Date().toISOString(),
-        };
-        return res.json(demoShipment);
+      const validation = getTrackingValidationResponse(
+        req.params?.trackingNumber,
+      );
+      if (validation.status !== 200) {
+        return res.status(validation.status).json({
+          error: validation.error,
+          message: validation.message,
+        });
       }
+
+      const { trackingNumber } = validation;
 
       const db = supabase;
 
@@ -1318,7 +1309,17 @@ router.post(
   requireBostaService,
   async (req, res) => {
     try {
-      const { trackingNumber } = req.params;
+      const validation = getTrackingValidationResponse(
+        req.params?.trackingNumber,
+      );
+      if (validation.status !== 200) {
+        return res.status(validation.status).json({
+          error: validation.error,
+          message: validation.message,
+        });
+      }
+
+      const { trackingNumber } = validation;
       const result = await req.bostaService.cancelDelivery(trackingNumber);
 
       // Log delivery cancellation

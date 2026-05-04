@@ -3,7 +3,16 @@ dotenv.config();
 import BostaService from "./src/services/bostaService.js";
 
 async function testBostaReal() {
-  const trackingNumber = "2695867962";
+  const trackingNumber = String(
+    process.argv[2] || process.env.BOSTA_TEST_TRACKING_NUMBER || "",
+  ).trim();
+
+  if (!trackingNumber) {
+    console.error(
+      "Provide a real tracking number via `node test-bosta-real.js <tracking>` or `BOSTA_TEST_TRACKING_NUMBER`.",
+    );
+    process.exit(1);
+  }
 
   console.log(`🔍 Testing Bosta Tracking: ${trackingNumber}`);
   console.log("=".repeat(60));

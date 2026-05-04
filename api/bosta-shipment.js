@@ -1,4 +1,16 @@
 // Vercel Serverless Function to proxy Bosta API requests
+const ZERO_WIDTH_PATTERN = /[\u200B-\u200D\uFEFF]/g;
+const INLINE_WHITESPACE_PATTERN = /\s+/g;
+
+const normalizeTrackingNumber = (value) =>
+  String(value ?? "")
+    .replace(ZERO_WIDTH_PATTERN, "")
+    .trim()
+    .replace(INLINE_WHITESPACE_PATTERN, "");
+
+const isDemoTrackingNumber = (value) =>
+  normalizeTrackingNumber(value).toUpperCase().startsWith("DEMO");
+
 const formatStateName = (stateName) =>
   String(stateName || "")
     .trim()
@@ -201,33 +213,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { trackingNumber } = req.query;
+  const trackingNumber = normalizeTrackingNumber(req.query?.trackingNumber);
 
   if (!trackingNumber) {
     return res.status(400).json({ error: "Tracking number is required" });
   }
 
-  // Handle demo tracking numbers
-  const demoTrackingNumbers = ["2695867962", "2685887962"];
-  if (
-    trackingNumber.toUpperCase().startsWith("DEMO") ||
-    demoTrackingNumbers.includes(trackingNumber)
-  ) {
-    const demoShipment = {
-      tracking_number: trackingNumber,
-      delivery_id: demoTrackingNumbers.includes(trackingNumber)
-        ? "real_delivery_001"
-        : "demo_delivery_001",
-      order_id: null,
-      bosta_order_type: 10,
-      delivery_state: 40,
-      delivery_state_label: "Delivered",
-      expected_shipping_cost: 50,
-      cod_amount: demoTrackingNumbers.includes(trackingNumber) ? 699.55 : 500,
-      is_delivered: true,
-      created_at: new Date().toISOString(),
-    };
-    return res.status(200).json(demoShipment);
+  if (isDemoTrackingNumber(trackingNumber)) {
+    return res.status(410).json({
+      error: "Demo tracking is disabled",
+      message: "Use a real Bosta tracking number instead of demo data.",
+    });
   }
 
   // Get Bosta API key from environment
