@@ -454,7 +454,6 @@ export default function Products() {
   }, [
     deferredSearchTerm,
     filters,
-    isAdmin,
     variantRows,
   ]);
 
