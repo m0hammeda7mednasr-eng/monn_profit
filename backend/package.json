@@ -11,7 +11,8 @@
     "build": "echo 'No build step required'",
     "migrate": "node-pg-migrate",
     "db:setup": "node scripts/setup-database.js",
-    "export:shopify-products": "node scripts/export-shopify-products-xlsx.js"
+    "export:shopify-products": "node scripts/export-shopify-products-xlsx.js",
+    "import:product-costs": "node scripts/import-product-costs-xlsx.js"
   },
   "jest": {
     "transform": {}
