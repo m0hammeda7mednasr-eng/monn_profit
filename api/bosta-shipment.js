@@ -1,9 +1,7 @@
 // Vercel Serverless Function to proxy Bosta API requests
-// This allows frontend to fetch shipment data without exposing API key
-
 export default async function handler(req, res) {
   // Enable CORS
-  res.setHeader("Access-Control-Allow-Credentials", true);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
   res.setHeader(
@@ -53,13 +51,16 @@ export default async function handler(req, res) {
   const bostaApiKey = process.env.BOSTA_API_KEY;
 
   if (!bostaApiKey) {
+    console.error("BOSTA_API_KEY not configured");
     return res.status(500).json({
       error: "Bosta API key not configured",
-      message: "Please configure BOSTA_API_KEY in Vercel environment variables",
+      message: "Please add BOSTA_API_KEY to Vercel environment variables",
     });
   }
 
   try {
+    console.log(`Fetching shipment ${trackingNumber} from Bosta API`);
+
     // Call Bosta API
     const bostaResponse = await fetch(
       `https://app.bosta.co/api/v2/deliveries/${trackingNumber}`,
@@ -72,9 +73,11 @@ export default async function handler(req, res) {
     );
 
     if (!bostaResponse.ok) {
+      console.error(`Bosta API returned ${bostaResponse.status}`);
+
       if (bostaResponse.status === 404) {
         return res.status(404).json({
-          error: "Tracking number not found",
+          error: "Tracking number not found in Bosta",
           tracking_number: trackingNumber,
         });
       }
@@ -85,16 +88,18 @@ export default async function handler(req, res) {
       return res.status(bostaResponse.status).json({
         error: "Failed to fetch from Bosta API",
         status: bostaResponse.status,
+        details: errorText,
       });
     }
 
     const bostaData = await bostaResponse.json();
+    console.log("Successfully fetched from Bosta API");
 
     // Format response to match our schema
     const shipment = {
       tracking_number: bostaData.trackingNumber || trackingNumber,
       delivery_id: bostaData._id,
-      order_id: null, // We don't have order mapping yet
+      order_id: null,
       bosta_order_type: bostaData.type,
       delivery_state: bostaData.state?.value || 0,
       delivery_state_label: bostaData.state?.label || "Unknown",
@@ -103,7 +108,6 @@ export default async function handler(req, res) {
       is_delivered: bostaData.state?.value === 40,
       created_at: bostaData.createdAt,
       updated_at: bostaData.updatedAt,
-      // Additional fields
       receiver: bostaData.receiver,
       dropOffAddress: bostaData.dropOffAddress,
       notes: bostaData.notes,

@@ -3,7 +3,17 @@
   "outputDirectory": "frontend/build",
   "installCommand": "npm install",
   "framework": null,
+  "functions": {
+    "api/bosta-shipment.js": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
   "rewrites": [
+    {
+      "source": "/api/bosta-shipment",
+      "destination": "/api/bosta-shipment"
+    },
     {
       "source": "/api/(.*)",
       "destination": "https://moon-profit-production.up.railway.app/api/$1"
