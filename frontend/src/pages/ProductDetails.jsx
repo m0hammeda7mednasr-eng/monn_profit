@@ -1,44 +1,34 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import Sidebar from "../components/Sidebar";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
+  AlertCircle,
   ArrowLeft,
-  Bell,
-  BellOff,
-  Package,
+  CheckCircle,
+  Clock,
+  Copy,
   Edit2,
+  Image as ImageIcon,
+  Package,
+  Printer,
   RefreshCw,
   Save,
-  ShieldCheck,
   X,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  Copy,
-  Image as ImageIcon,
-  Printer,
 } from "lucide-react";
-import api from "../utils/api";
+import Sidebar from "../components/Sidebar";
 import BarcodeLabelModal from "../components/BarcodeLabelModal";
 import { useAuth } from "../context/AuthContext";
 import { useLocale } from "../context/LocaleContext";
+import api from "../utils/api";
 import { normalizeBarcodeVariantTitle } from "../utils/barcodeLabels";
 import {
   formatCurrency as formatMoney,
   formatDateTime,
-  formatNumber,
 } from "../utils/localeFormat";
-import {
-  buildRealizedOrdersProfitability,
-  buildSavedUnitCostSnapshot,
-} from "../utils/productProfitability";
 
 const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
-const formatCount = (value) =>
-  formatNumber(value, { maximumFractionDigits: 0 });
 
 const PRODUCT_FIELD_LABELS = {
   price: "Price",
@@ -46,12 +36,8 @@ const PRODUCT_FIELD_LABELS = {
   sku: "SKU",
   variants: "Variant changes",
   cost_price: "Cost price",
-  ads_cost: "Ads cost",
-  operation_cost: "Operation cost",
-  shipping_cost: "Shipping cost",
-  supplier_phone: "Supplier phone",
-  supplier_location: "Supplier location",
 };
+
 const formatFieldList = (fields = []) => {
   const labels = Array.from(
     new Set(
@@ -66,6 +52,7 @@ const formatFieldList = (fields = []) => {
   if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
   return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
 };
+
 const buildSaveMessage = (result = {}) => {
   const shopifyFields = Array.isArray(result?.shopifyFields)
     ? result.shopifyFields
@@ -75,20 +62,20 @@ const buildSaveMessage = (result = {}) => {
     : [];
 
   if (shopifyFields.length > 0 && localOnlyFields.length > 0) {
-    return `✅ تم الحفظ بنجاح! ${formatFieldList(shopifyFields)} تم مزامنتها مع Shopify. ${formatFieldList(localOnlyFields)} تم حفظها محلياً فقط.`;
+    return `Saved successfully. ${formatFieldList(shopifyFields)} synced to Shopify, and ${formatFieldList(localOnlyFields)} was saved locally.`;
   }
 
   if (shopifyFields.length > 0) {
-    return `✅ تم الحفظ والمزامنة مع Shopify بنجاح! تم تحديث: ${formatFieldList(shopifyFields)}`;
+    return `Saved and synced to Shopify: ${formatFieldList(shopifyFields)}.`;
   }
 
   if (localOnlyFields.length > 0) {
-    return `✅ تم الحفظ محلياً بنجاح! تم تحديث: ${formatFieldList(localOnlyFields)}`;
+    return `Saved locally: ${formatFieldList(localOnlyFields)}.`;
   }
 
   return result?.shopifySync === "synced"
-    ? "✅ تم الحفظ والمزامنة مع Shopify بنجاح!"
-    : "✅ تم الحفظ محلياً بنجاح!";
+    ? "Saved and synced to Shopify."
+    : "Saved successfully.";
 };
 
 const cloneVariantDrafts = (variants = []) =>
@@ -99,6 +86,59 @@ const cloneVariantDrafts = (variants = []) =>
     inventory_quantity: String(toNumber(variant.inventory_quantity)),
   }));
 
+const getSyncState = (product, select) => {
+  if (product?.pending_sync) {
+    return {
+      label: select("بانتظار المزامنة", "Pending sync"),
+      tone: "text-amber-700 bg-amber-50 border-amber-200",
+      icon: Clock,
+    };
+  }
+
+  if (product?.sync_error) {
+    return {
+      label: select("فشل في المزامنة", "Sync failed"),
+      tone: "text-rose-700 bg-rose-50 border-rose-200",
+      icon: AlertCircle,
+    };
+  }
+
+  if (product?.last_synced_at) {
+    return {
+      label: select("تمت المزامنة", "Synced"),
+      tone: "text-emerald-700 bg-emerald-50 border-emerald-200",
+      icon: CheckCircle,
+    };
+  }
+
+  return {
+    label: select("لم تتم المزامنة بعد", "Not synced yet"),
+    tone: "text-slate-700 bg-slate-50 border-slate-200",
+    icon: Clock,
+  };
+};
+
+const getInventoryStatus = (quantity, select) => {
+  if (quantity <= 0) {
+    return {
+      label: select("نفذ من المخزون", "Out of stock"),
+      tone: "text-rose-700 bg-rose-50 border-rose-200",
+    };
+  }
+
+  if (quantity < 10) {
+    return {
+      label: select("كمية قليلة", "Low stock"),
+      tone: "text-amber-700 bg-amber-50 border-amber-200",
+    };
+  }
+
+  return {
+    label: select("متوفر", "In stock"),
+    tone: "text-emerald-700 bg-emerald-50 border-emerald-200",
+  };
+};
+
 export default function ProductDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -107,22 +147,20 @@ export default function ProductDetails() {
   const { select, currencyLabel } = useLocale();
   const canEditProducts = hasPermission("can_edit_products");
   const canPrintBarcodeLabels = hasPermission("can_print_barcode_labels");
+
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
-  const [barcodeModalTargetKey, setBarcodeModalTargetKey] = useState("");
-  const [lowStockAlertsSaving, setLowStockAlertsSaving] = useState(false);
-
-  // Editable fields
   const [editedProduct, setEditedProduct] = useState({});
   const [editedVariants, setEditedVariants] = useState([]);
-  const [fulfilledProfitSummary, setFulfilledProfitSummary] = useState(null);
-  const [fulfilledProfitError, setFulfilledProfitError] = useState("");
+  const [lowStockAlertsSaving, setLowStockAlertsSaving] = useState(false);
+  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [barcodeModalTargetKey, setBarcodeModalTargetKey] = useState("");
 
   const hasMultipleVariants = (product?.variants?.length || 0) > 1;
+
   const editedVariantsById = useMemo(
     () =>
       new Map(editedVariants.map((variant) => [String(variant.id), variant])),
@@ -160,32 +198,26 @@ export default function ProductDetails() {
     );
   }, [product]);
 
-  const profitabilitySnapshot = useMemo(
-    () =>
-      buildSavedUnitCostSnapshot(editing ? editedProduct : product, {
-        quantity: displayedInventoryQuantity,
-      }),
-    [displayedInventoryQuantity, editedProduct, editing, product],
+  const displayedProductPrice = useMemo(() => {
+    if (!product) return 0;
+
+    return editing && !hasMultipleVariants
+      ? toNumber(editedProduct.price)
+      : toNumber(product.price);
+  }, [editedProduct.price, editing, hasMultipleVariants, product]);
+
+  const displayedCostPrice = useMemo(() => {
+    if (!product) return 0;
+
+    return isAdmin && editing
+      ? toNumber(editedProduct.cost_price)
+      : toNumber(product.cost_price);
+  }, [editedProduct.cost_price, editing, isAdmin, product]);
+
+  const estimatedUnitMargin = useMemo(
+    () => displayedProductPrice - displayedCostPrice,
+    [displayedCostPrice, displayedProductPrice],
   );
-  const profitabilityTone =
-    profitabilitySnapshot.unitProfit >= 0
-      ? {
-          wrapper:
-            "border-emerald-200 bg-emerald-50/90 text-emerald-900",
-          badge: "bg-emerald-100 text-emerald-700",
-          subtle: "text-emerald-700",
-        }
-      : {
-          wrapper: "border-rose-200 bg-rose-50/90 text-rose-900",
-          badge: "bg-rose-100 text-rose-700",
-          subtle: "text-rose-700",
-        };
-  const realizedOrdersProfitability = useMemo(() => {
-    return buildRealizedOrdersProfitability(
-      fulfilledProfitSummary,
-      profitabilitySnapshot.totalUnitCost,
-    );
-  }, [fulfilledProfitSummary, profitabilitySnapshot.totalUnitCost]);
 
   const barcodeTargets = useMemo(() => {
     if (!product) {
@@ -225,94 +257,38 @@ export default function ProductDetails() {
   }, [hasMultipleVariants, product]);
 
   const hasPrintableBarcodeTarget = barcodeTargets.length > 0;
+  const syncState = getSyncState(product, select);
+  const inventoryState = getInventoryStatus(displayedInventoryQuantity, select);
+  const SyncIcon = syncState.icon;
 
   const showNotification = useCallback((message, type = "info") => {
     setNotification({ message, type });
-
-    // Play notification sound for success
-    if (type === "success") {
-      try {
-        // Create a simple success sound
-        const audioContext = new (
-          window.AudioContext || window.webkitAudioContext
-        )();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-
-        oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-        oscillator.frequency.setValueAtTime(
-          1000,
-          audioContext.currentTime + 0.1,
-        );
-
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(
-          0.01,
-          audioContext.currentTime + 0.3,
-        );
-
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.3);
-      } catch (error) {
-        // Ignore audio errors
-      }
-    }
-
-    // Much longer timeout for success messages to ensure visibility
-    const timeout = type === "success" ? 12000 : 7000;
-    setTimeout(() => setNotification(null), timeout);
+    window.setTimeout(() => setNotification(null), type === "success" ? 8000 : 5000);
   }, []);
 
   const fetchProductDetails = useCallback(async () => {
     setLoading(true);
+
     try {
-      const requests = [api.get(`/shopify/products/${id}/details`)];
-      if (isAdmin) {
-        requests.push(api.get(`/dashboard/products/${id}/fulfilled-profit`));
-      }
-
-      const results = await Promise.allSettled(requests);
-      const productResult = results[0];
-
-      if (productResult?.status !== "fulfilled") {
-        throw productResult?.reason || new Error("Failed to load product");
-      }
-
-      const nextProduct = productResult.value.data;
+      const response = await api.get(`/shopify/products/${id}/details`);
+      const nextProduct = response.data;
       setProduct(nextProduct);
       setEditedProduct(nextProduct);
       setEditedVariants(cloneVariantDrafts(nextProduct?.variants || []));
-
-      if (isAdmin) {
-        const fulfilledProfitResult = results[1];
-        if (fulfilledProfitResult?.status === "fulfilled") {
-          setFulfilledProfitSummary(fulfilledProfitResult.value.data || null);
-          setFulfilledProfitError("");
-        } else {
-          setFulfilledProfitSummary(null);
-          setFulfilledProfitError(
-            fulfilledProfitResult?.reason?.response?.data?.error ||
-              "تعذر تحميل الربح المحقق من الأوردرات الناجحة",
-          );
-        }
-      } else {
-        setFulfilledProfitSummary(null);
-        setFulfilledProfitError("");
-      }
     } catch (error) {
       console.error("Error fetching product details:", error);
-      showNotification("فشل تحميل تفاصيل المنتج", "error");
+      showNotification(
+        select("فشل تحميل تفاصيل المنتج", "Failed to load product details"),
+        "error",
+      );
     } finally {
       setLoading(false);
     }
-  }, [id, isAdmin, showNotification]);
+  }, [id, select, showNotification]);
 
   useEffect(() => {
     fetchProductDetails();
-  }, [id, fetchProductDetails]);
+  }, [fetchProductDetails]);
 
   useEffect(() => {
     if (!product || searchParams.get("mode") !== "edit") {
@@ -329,19 +305,17 @@ export default function ProductDetails() {
   }, [canEditProducts, product, searchParams, setSearchParams]);
 
   const handleSave = async () => {
-    if (!canEditProducts) return;
+    if (!canEditProducts || !product) {
+      return;
+    }
+
     setSaving(true);
+
     try {
       const payload = {};
       const nextPrice = parseFloat(editedProduct.price);
       const nextInventory = parseInt(editedProduct.inventory_quantity, 10);
       const nextSku = String(editedProduct.sku || "").trim();
-      const nextSupplierPhone = String(
-        editedProduct.supplier_phone || "",
-      ).trim();
-      const nextSupplierLocation = String(
-        editedProduct.supplier_location || "",
-      ).trim();
 
       if (
         !hasMultipleVariants &&
@@ -367,30 +341,6 @@ export default function ProductDetails() {
         ) {
           payload.cost_price = nextCostPrice;
         }
-
-        const nextAdsCost = parseFloat(editedProduct.ads_cost || 0);
-        if (
-          Number.isFinite(nextAdsCost) &&
-          nextAdsCost !== toNumber(product.ads_cost)
-        ) {
-          payload.ads_cost = nextAdsCost;
-        }
-
-        const nextOperationCost = parseFloat(editedProduct.operation_cost || 0);
-        if (
-          Number.isFinite(nextOperationCost) &&
-          nextOperationCost !== toNumber(product.operation_cost)
-        ) {
-          payload.operation_cost = nextOperationCost;
-        }
-
-        const nextShippingCost = parseFloat(editedProduct.shipping_cost || 0);
-        if (
-          Number.isFinite(nextShippingCost) &&
-          nextShippingCost !== toNumber(product.shipping_cost)
-        ) {
-          payload.shipping_cost = nextShippingCost;
-        }
       }
 
       if (
@@ -398,16 +348,6 @@ export default function ProductDetails() {
         nextSku !== String(product.sku || "").trim()
       ) {
         payload.sku = nextSku;
-      }
-
-      if (nextSupplierPhone !== String(product.supplier_phone || "").trim()) {
-        payload.supplier_phone = nextSupplierPhone;
-      }
-
-      if (
-        nextSupplierLocation !== String(product.supplier_location || "").trim()
-      ) {
-        payload.supplier_location = nextSupplierLocation;
       }
 
       const originalVariantsById = new Map(
@@ -423,9 +363,7 @@ export default function ProductDetails() {
 
       const variantUpdates = editedVariants
         .map((variant) => {
-          const variantId = String(variant.id || "");
-          const originalVariant = originalVariantsById.get(variantId);
-
+          const originalVariant = originalVariantsById.get(String(variant.id || ""));
           if (!originalVariant) {
             return null;
           }
@@ -462,59 +400,47 @@ export default function ProductDetails() {
       }
 
       if (Object.keys(payload).length === 0) {
-        showNotification("لا توجد تغييرات للحفظ", "info");
+        showNotification(select("لا توجد تغييرات للحفظ", "No changes to save"));
         setSaving(false);
         return;
       }
 
-      const response = await api.post(
-        `/shopify/products/${id}/update`,
-        payload,
-      );
+      const response = await api.post(`/shopify/products/${id}/update`, payload);
       const saveResult = response.data || {};
-
-      // Show detailed success message
       const updatedFields = Object.keys(payload).filter(
         (key) => key !== "variant_updates",
       );
-      const variantUpdatesCount = payload.variant_updates
-        ? payload.variant_updates.length
-        : 0;
+      const variantUpdatesCount = payload.variant_updates?.length || 0;
 
       let detailedMessage = buildSaveMessage(saveResult);
       if (updatedFields.length > 0) {
-        detailedMessage += ` تم تحديث: ${formatFieldList(updatedFields)}`;
+        detailedMessage += ` Updated: ${formatFieldList(updatedFields)}.`;
       }
       if (variantUpdatesCount > 0) {
-        detailedMessage += ` وتم تحديث ${variantUpdatesCount} متغير`;
+        detailedMessage += ` ${variantUpdatesCount} variant(s) updated.`;
       }
 
       showNotification(detailedMessage, "success");
-
-      // Add a brief flash effect to indicate success
-      document.body.style.backgroundColor = "#10b981";
-      setTimeout(() => {
-        document.body.style.backgroundColor = "";
-      }, 200);
       setEditing(false);
 
       if (saveResult.shopifySync === "synced") {
-        setTimeout(() => {
-          fetchProductDetails();
-        }, 1500);
+        window.setTimeout(fetchProductDetails, 1000);
       } else {
         fetchProductDetails();
       }
     } catch (error) {
       console.error("Error saving product:", error);
-      showNotification(error.response?.data?.error || "فشل الحفظ", "error");
+      showNotification(
+        error?.response?.data?.error || select("فشل الحفظ", "Save failed"),
+        "error",
+      );
     } finally {
       setSaving(false);
     }
   };
 
   const handleCancel = () => {
-    setEditedProduct(product);
+    setEditedProduct(product || {});
     setEditedVariants(cloneVariantDrafts(product?.variants || []));
     setEditing(false);
   };
@@ -567,7 +493,7 @@ export default function ProductDetails() {
       return;
     }
 
-    const nextSuppressed = !Boolean(product?.suppress_low_stock_alerts);
+    const nextSuppressed = !Boolean(product.suppress_low_stock_alerts);
     setLowStockAlertsSaving(true);
 
     try {
@@ -599,17 +525,17 @@ export default function ProductDetails() {
               "Low-stock alerts were turned off for this product.",
             )
           : select(
-              "تم تشغيل تنبيهات المخزون المنخفض لهذا المنتج من جديد.",
-              "Low-stock alerts were turned back on for this product.",
+              "تم تشغيل تنبيهات المخزون المنخفض لهذا المنتج.",
+              "Low-stock alerts were turned on for this product.",
             ),
         "success",
       );
     } catch (error) {
-      console.error("Error updating low-stock alert preference:", error);
+      console.error("Error updating low-stock alerts:", error);
       showNotification(
         error?.response?.data?.error ||
           select(
-            "فشل تحديث إعداد تنبيهات المخزون المنخفض.",
+            "فشل تحديث تنبيهات المخزون المنخفض.",
             "Failed to update the low-stock alert setting.",
           ),
         "error",
@@ -630,47 +556,13 @@ export default function ProductDetails() {
   const handleCopyProductReference = async () => {
     try {
       await navigator.clipboard.writeText(String(product?.id || id || ""));
-      showNotification(
-        select("تم نسخ معرف المنتج", "Product ID copied"),
-        "success",
-      );
+      showNotification(select("تم نسخ معرف المنتج", "Product ID copied"), "success");
     } catch {
       showNotification(
         select("فشل نسخ معرف المنتج", "Failed to copy product ID"),
         "error",
       );
     }
-  };
-
-  const getSyncStatusIcon = () => {
-    if (product?.pending_sync) {
-      return (
-        <Clock
-          size={20}
-          className="text-yellow-500"
-          title="في انتظار المزامنة"
-        />
-      );
-    }
-    if (product?.sync_error) {
-      return (
-        <AlertCircle
-          size={20}
-          className="text-red-500"
-          title={product.sync_error}
-        />
-      );
-    }
-    if (product?.last_synced_at) {
-      return (
-        <CheckCircle
-          size={20}
-          className="text-green-500"
-          title="تمت المزامنة"
-        />
-      );
-    }
-    return null;
   };
 
   const formatDate = (dateString) =>
@@ -684,12 +576,14 @@ export default function ProductDetails() {
 
   if (loading) {
     return (
-      <div className="flex h-screen bg-transparent">
+      <div className="flex h-screen bg-slate-100">
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center">
+        <main className="flex flex-1 items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">جاري تحميل تفاصيل المنتج...</p>
+            <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-sky-600" />
+            <p className="text-slate-600">
+              {select("جاري تحميل تفاصيل المنتج...", "Loading product details...")}
+            </p>
           </div>
         </main>
       </div>
@@ -698,17 +592,27 @@ export default function ProductDetails() {
 
   if (!product) {
     return (
-      <div className="flex h-screen bg-transparent">
+      <div className="flex h-screen bg-slate-100">
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <Package size={64} className="mx-auto text-gray-400 mb-4" />
-            <p className="text-gray-600 text-lg">لم يتم العثور على المنتج</p>
+        <main className="flex flex-1 items-center justify-center px-6">
+          <div className="max-w-md rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-sm">
+            <Package size={56} className="mx-auto text-slate-300" />
+            <h1 className="mt-5 text-2xl font-bold text-slate-900">
+              {select("المنتج غير موجود", "Product not found")}
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">
+              {select(
+                "قد يكون المنتج تم حذفه أو لا يمكنك الوصول إليه.",
+                "The product may have been removed or you do not have access to it.",
+              )}
+            </p>
             <button
+              type="button"
               onClick={() => navigate("/products")}
-              className="mt-4 text-blue-600 hover:text-blue-700"
+              className="app-button-primary mt-6 inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white"
             >
-              العودة إلى المنتجات
+              <ArrowLeft size={16} />
+              {select("الرجوع للمنتجات", "Back to products")}
             </button>
           </div>
         </main>
@@ -716,1295 +620,574 @@ export default function ProductDetails() {
     );
   }
 
+  const variants =
+    Array.isArray(product.variants) && product.variants.length > 0
+      ? product.variants
+      : [product];
+
   return (
-    <div className="flex h-screen bg-transparent">
+    <div className="flex h-screen bg-slate-100">
       <Sidebar />
 
       <main className="flex-1 overflow-auto">
-        <div className="p-8">
-          {/* Notification */}
-          {notification && (
+        <div className="space-y-6 p-6 lg:p-8">
+          {notification ? (
             <div
-              className={`fixed top-6 left-1/2 transform -translate-x-1/2 z-50 px-8 py-6 rounded-2xl shadow-2xl flex items-center gap-4 border-2 animate-in slide-in-from-top-5 duration-500 ${
+              className={`fixed right-4 top-4 z-50 rounded-2xl px-5 py-3 text-sm font-medium text-white shadow-lg ${
                 notification.type === "success"
-                  ? "bg-emerald-500 text-white border-emerald-400"
+                  ? "bg-emerald-600"
                   : notification.type === "error"
-                    ? "bg-red-500 text-white border-red-400"
-                    : "bg-blue-500 text-white border-blue-400"
+                    ? "bg-rose-600"
+                    : "bg-sky-600"
               }`}
-              style={{ minWidth: "400px", maxWidth: "600px" }}
             >
-              {notification.type === "success" && (
-                <div className="flex-shrink-0">
-                  <CheckCircle size={32} className="animate-pulse" />
-                </div>
-              )}
-              {notification.type === "error" && (
-                <div className="flex-shrink-0">
-                  <AlertCircle size={32} />
-                </div>
-              )}
-              <div className="flex-1">
-                <div className="text-lg font-bold mb-1">
-                  {notification.type === "success" ? "تم بنجاح!" : "خطأ!"}
-                </div>
-                <div className="text-sm leading-relaxed opacity-95">
-                  {notification.message}
-                </div>
-              </div>
-              <button
-                onClick={() => setNotification(null)}
-                className="flex-shrink-0 text-white/80 hover:text-white transition-colors"
-              >
-                <X size={24} />
-              </button>
+              {notification.message}
             </div>
-          )}
+          ) : null}
 
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate("/products")}
-                className="app-button-secondary rounded-2xl p-2.5 text-slate-700"
-              >
-                <ArrowLeft size={24} />
-              </button>
-              <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-3xl font-bold text-gray-800">
-                    {product.title}
-                  </h1>
-                  {getSyncStatusIcon()}
-                  <button
-                    onClick={handleCopyProductReference}
-                    className="app-button-secondary inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-slate-700"
-                    title={select("نسخ معرف المنتج", "Copy product ID")}
-                  >
-                    <Copy size={14} />
-                    {select("نسخ", "Copy")}
-                  </button>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate("/products")}
+                  className="app-button-secondary flex h-11 w-11 items-center justify-center rounded-2xl text-slate-700"
+                >
+                  <ArrowLeft size={20} />
+                </button>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h1 className="truncate text-3xl font-bold text-slate-900">
+                      {product.title}
+                    </h1>
+                    <span
+                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${syncState.tone}`}
+                    >
+                      <SyncIcon size={14} />
+                      {syncState.label}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-500">
+                    {select("تم الإنشاء في", "Created on")} {formatDate(product.created_at)}
+                  </p>
                 </div>
-                <p className="text-gray-600">
-                  تم الإنشاء في {formatDate(product.created_at)}
-                </p>
               </div>
             </div>
-            <div className="flex gap-2">
-              {canPrintBarcodeLabels && hasPrintableBarcodeTarget && (
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleCopyProductReference}
+                className="app-button-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700"
+              >
+                <Copy size={16} />
+                {select("نسخ المعرف", "Copy ID")}
+              </button>
+
+              {canPrintBarcodeLabels && hasPrintableBarcodeTarget ? (
                 <button
+                  type="button"
                   onClick={() => openBarcodeModal(barcodeTargets[0]?.key || "")}
-                  className="app-button-secondary flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700"
+                  className="app-button-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700"
                 >
                   <Printer size={16} />
                   {select("طباعة ليبل", "Print label")}
                 </button>
-              )}
-              {canEditProducts &&
-                (editing ? (
+              ) : null}
+
+              {canEditProducts ? (
+                editing ? (
                   <>
                     <button
+                      type="button"
                       onClick={handleCancel}
                       disabled={saving}
-                      className="app-button-secondary flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                      className="app-button-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
                     >
                       <X size={16} />
-                      إلغاء
+                      {select("إلغاء", "Cancel")}
                     </button>
                     <button
+                      type="button"
                       onClick={handleSave}
                       disabled={saving}
-                      className="app-button-primary flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                      className="app-button-primary inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                     >
                       {saving ? (
                         <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          جاري الحفظ...
+                          <RefreshCw size={16} className="animate-spin" />
+                          {select("جاري الحفظ...", "Saving...")}
                         </>
                       ) : (
                         <>
                           <Save size={16} />
-                          حفظ التغييرات
+                          {select("حفظ التغييرات", "Save changes")}
                         </>
                       )}
                     </button>
                   </>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => setEditing(true)}
-                    className="app-button-primary flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-white"
+                    className="app-button-primary inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-white"
                   >
                     <Edit2 size={16} />
-                    تعديل
+                    {select("تعديل", "Edit")}
                   </button>
-                ))}
+                )
+              ) : null}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main Content */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Product Image */}
-              <div className="app-surface rounded-[28px] p-6">
-                <h2 className="text-xl font-bold text-gray-800 mb-4">
-                  صورة المنتج
-                </h2>
-                <div className="flex h-96 w-full items-center justify-center overflow-hidden rounded-[24px] bg-slate-100">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
+            <div className="space-y-6">
+              <section className="app-surface rounded-[28px] p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900">
+                      {select("صورة المنتج", "Product image")}
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {select(
+                        "عرض بسيط للصورة الأساسية فقط.",
+                        "Showing the main product image only.",
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-5 flex h-80 items-center justify-center overflow-hidden rounded-[24px] bg-slate-100">
                   {product.image_url ? (
                     <img
                       src={product.image_url}
                       alt={product.title}
-                      className="w-full h-full object-contain"
+                      className="h-full w-full object-contain"
                     />
                   ) : (
-                    <ImageIcon size={64} className="text-gray-400" />
+                    <ImageIcon size={64} className="text-slate-400" />
                   )}
                 </div>
-              </div>
+              </section>
 
-              {/* Product Description */}
-              {product.body_html && (
-                <div className="app-surface rounded-[28px] p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4">
-                    الوصف
+              {product.body_html ? (
+                <section className="app-surface rounded-[28px] p-6">
+                  <h2 className="text-xl font-bold text-slate-900">
+                    {select("الوصف", "Description")}
                   </h2>
                   <div
-                    className="prose max-w-none text-gray-700"
+                    className="prose mt-5 max-w-none text-slate-700"
                     dangerouslySetInnerHTML={{ __html: product.body_html }}
                   />
-                </div>
-              )}
+                </section>
+              ) : null}
 
-              {/* Variants */}
-              {product.variants && product.variants.length > 0 && (
-                <div className="app-surface rounded-[28px] p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4">
-                    الأشكال ({product.variants.length})
-                  </h2>
-                  {hasMultipleVariants && (
-                    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-                      تعديلات المخزون هنا تخص Shopify لكل Variant. مخزون
-                      المخزن/السكانر يظهر منفصلًا للمرجعية فقط.
-                    </div>
-                  )}
-                  <div className="space-y-3">
-                    {product.variants.map((variant, index) => {
-                      const variantDraft =
-                        editedVariantsById.get(String(variant.id || "")) || {};
-                      const displayedVariantPrice =
-                        editing && hasMultipleVariants
-                          ? (variantDraft.price ?? variant.price)
-                          : variant.price;
-                      const displayedVariantSku =
-                        editing && hasMultipleVariants
-                          ? (variantDraft.sku ?? variant.sku)
-                          : variant.sku;
-                      const displayedVariantInventory = toNumber(
-                        editing && hasMultipleVariants
-                          ? (variantDraft.inventory_quantity ??
-                              variant.inventory_quantity)
-                          : variant.inventory_quantity,
-                      );
-                      const displayedVariantWarehouseInventory = toNumber(
-                        variant.warehouse_inventory_quantity,
-                      );
-
-                      return (
-                        <div
-                          key={index}
-                          className="rounded-[24px] border border-slate-200 bg-white/80 p-4 transition hover:border-slate-300 hover:bg-white"
-                          data-variant-inventory={displayedVariantInventory}
-                        >
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <p className="font-semibold text-gray-800">
-                                {variant.title}
-                              </p>
-                              {(displayedVariantSku ||
-                                (editing && hasMultipleVariants)) && (
-                                <p className="text-sm text-gray-600">
-                                  SKU: {displayedVariantSku || "-"}
-                                </p>
-                              )}
-                              {variant.barcode && (
-                                <p className="text-sm text-gray-600">
-                                  Barcode: {variant.barcode}
-                                </p>
-                              )}
-                              {variant.weight && (
-                                <p className="text-sm text-gray-600">
-                                  الوزن: {variant.weight} {variant.weight_unit}
-                                </p>
-                              )}
-                              <div className="flex gap-4 mt-2">
-                                {variant.option1 && (
-                                  <span className="app-chip px-2.5 py-1 text-xs text-slate-700">
-                                    {variant.option1}
-                                  </span>
-                                )}
-                                {variant.option2 && (
-                                  <span className="app-chip px-2.5 py-1 text-xs text-slate-700">
-                                    {variant.option2}
-                                  </span>
-                                )}
-                                {variant.option3 && (
-                                  <span className="app-chip px-2.5 py-1 text-xs text-slate-700">
-                                    {variant.option3}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-left">
-                              <p className="text-lg font-bold text-gray-800">
-                                {formatMoney(displayedVariantPrice)}
-                              </p>
-                              {variant.compare_at_price &&
-                                parseFloat(variant.compare_at_price) >
-                                  parseFloat(displayedVariantPrice) && (
-                                  <p className="text-sm text-gray-500 line-through">
-                                    {formatMoney(variant.compare_at_price)}
-                                  </p>
-                                )}
-                              <p
-                                className={`text-sm ${
-                                  toNumber(
-                                    editing
-                                      ? (editedVariantsById.get(
-                                          String(variant.id || ""),
-                                        )?.inventory_quantity ??
-                                          variant.inventory_quantity)
-                                      : variant.inventory_quantity,
-                                  ) > 10
-                                    ? "text-green-600"
-                                    : toNumber(
-                                          editing
-                                            ? (editedVariantsById.get(
-                                                String(variant.id || ""),
-                                              )?.inventory_quantity ??
-                                                variant.inventory_quantity)
-                                            : variant.inventory_quantity,
-                                        ) > 0
-                                      ? "text-yellow-600"
-                                      : "text-red-600"
-                                }`}
-                              >
-                                Shopify: {displayedVariantInventory}
-                              </p>
-                              <p className="text-sm text-slate-600">
-                                Warehouse: {displayedVariantWarehouseInventory}
-                              </p>
-                              {displayedVariantInventory !==
-                              displayedVariantWarehouseInventory ? (
-                                <p className="mt-1 text-xs text-amber-700">
-                                  فيه فرق بين Shopify والمخزن لهذا الـ Variant.
-                                </p>
-                              ) : null}
-                              {canPrintBarcodeLabels &&
-                              (variant.barcode || displayedVariantSku) && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    openBarcodeModal(
-                                      String(
-                                        variant.id ||
-                                          barcodeTargets[0]?.key ||
-                                          "",
-                                      ),
-                                    )
-                                  }
-                                  className="mt-3 app-button-secondary inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700"
-                                >
-                                  <Printer size={14} />
-                                  {select("طباعة ليبل", "Print label")}
-                                </button>
-                              )}
-                              {editing &&
-                                canEditProducts &&
-                                hasMultipleVariants && (
-                                  <div className="mt-3 space-y-3">
-                                    <div>
-                                      <label className="mb-1 block text-xs font-medium text-gray-600">
-                                        SKU
-                                      </label>
-                                      <input
-                                        type="text"
-                                        value={
-                                          variantDraft.sku ??
-                                          String(variant.sku || "")
-                                        }
-                                        onChange={(event) =>
-                                          handleVariantFieldChange(
-                                            variant.id,
-                                            "sku",
-                                            event.target.value,
-                                          )
-                                        }
-                                        className="app-input w-full px-3 py-2.5 text-sm"
-                                        placeholder="SKU-001"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="mb-1 block text-xs font-medium text-gray-600">
-                                        {select("تعديل السعر", "Edit price")}
-                                      </label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={
-                                          variantDraft.price ??
-                                          String(variant.price ?? "")
-                                        }
-                                        onChange={(event) =>
-                                          handleVariantFieldChange(
-                                            variant.id,
-                                            "price",
-                                            event.target.value,
-                                          )
-                                        }
-                                        className="app-input w-full px-3 py-2.5 text-sm"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="mb-1 block text-xs font-medium text-gray-600">
-                                        تعديل مخزون هذا الـ Variant
-                                      </label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        step="1"
-                                        value={
-                                          editedVariantsById.get(
-                                            String(variant.id || ""),
-                                          )?.inventory_quantity ??
-                                          String(
-                                            toNumber(
-                                              variant.inventory_quantity,
-                                            ),
-                                          )
-                                        }
-                                        onChange={(event) =>
-                                          handleVariantFieldChange(
-                                            variant.id,
-                                            "inventory_quantity",
-                                            event.target.value,
-                                          )
-                                        }
-                                        className="app-input w-full px-3 py-2.5 text-sm"
-                                      />
-                                    </div>
-                                  </div>
-                                )}
-                              {variant.requires_shipping && (
-                                <p className="text-xs text-gray-500 mt-1">
-                                  يتطلب شحن
-                                </p>
-                              )}
-                              {variant.taxable && (
-                                <p className="text-xs text-gray-500">
-                                  خاضع للضريبة
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Product Images Gallery */}
-              {product.images && product.images.length > 1 && (
-                <div className="app-surface rounded-[28px] p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4">
-                    معرض الصور ({product.images.length})
-                  </h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {product.images.map((image, index) => (
-                      <div
-                        key={index}
-                        className="relative aspect-square overflow-hidden rounded-[22px] bg-slate-100 transition hover:shadow-lg"
-                      >
-                        <img
-                          src={image.src}
-                          alt={image.alt || `صورة ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                        {image.alt && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-2">
-                            {image.alt}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Product Options */}
-              {product.options && product.options.length > 0 && (
-                <div className="app-surface rounded-[28px] p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4">
-                    خيارات المنتج
-                  </h2>
-                  <div className="space-y-4">
-                    {product.options.map((option, index) => (
-                      <div
-                        key={index}
-                        className="border-b border-gray-200 pb-4 last:border-0"
-                      >
-                        <p className="font-semibold text-gray-800 mb-2">
-                          {option.name}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {option.values.map((value, vIndex) => (
-                            <span
-                              key={vIndex}
-                              className="px-3 py-1 bg-blue-50 text-blue-800 rounded-lg text-sm"
-                            >
-                              {value}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* SEO Information */}
-              {(product.seo_title ||
-                product.seo_description ||
-                product.handle) && (
-                <div className="app-surface rounded-[28px] p-6">
-                  <h2 className="text-xl font-bold text-gray-800 mb-4">
-                    معلومات SEO
-                  </h2>
-                  <div className="space-y-3">
-                    {product.handle && (
-                      <div>
-                        <p className="text-sm text-gray-600">Handle (URL)</p>
-                        <p className="font-mono text-gray-800 bg-gray-50 px-3 py-2 rounded">
-                          {product.handle}
-                        </p>
-                      </div>
-                    )}
-                    {product.seo_title && (
-                      <div>
-                        <p className="text-sm text-gray-600">عنوان SEO</p>
-                        <p className="text-gray-800">{product.seo_title}</p>
-                      </div>
-                    )}
-                    {product.seo_description && (
-                      <div>
-                        <p className="text-sm text-gray-600">وصف SEO</p>
-                        <p className="text-gray-700 text-sm">
-                          {product.seo_description}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Price & Inventory */}
-              <div className="app-surface rounded-[28px] p-6">
-                <h2 className="text-lg font-bold text-gray-800 mb-4">
-                  السعر والمخزون
-                </h2>
-                <div className="space-y-4">
+              <section className="app-surface rounded-[28px] p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      السعر ({currencyLabel})
-                    </label>
-                    {editing && !hasMultipleVariants ? (
-                      <input
-                        type="number"
-                        value={editedProduct.price}
-                        onChange={(e) =>
-                          setEditedProduct({
-                            ...editedProduct,
-                            price: e.target.value,
-                          })
-                        }
-                        min="0"
-                        step="0.01"
-                        className="app-input w-full px-3 py-2.5 text-sm"
-                      />
-                    ) : (
-                      <>
-                        <p className="text-2xl font-bold text-gray-800">
-                          {formatMoney(product.price)}
-                        </p>
-                        {editing && hasMultipleVariants && (
-                          <p className="mt-2 text-sm text-slate-600">
-                            Edit each variant price in the variants section.
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {isAdmin && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          سعر التكلفة ({currencyLabel})
-                        </label>
-                        {editing ? (
-                          <input
-                            type="number"
-                            value={editedProduct.cost_price || 0}
-                            onChange={(e) =>
-                              setEditedProduct({
-                                ...editedProduct,
-                                cost_price: e.target.value,
-                              })
-                            }
-                            min="0"
-                            step="0.01"
-                            className="app-input w-full px-3 py-2.5 text-sm"
-                          />
-                        ) : (
-                          <p className="text-2xl font-bold text-gray-800">
-                            {formatMoney(product.cost_price || 0)}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          تكلفة الإعلانات ({currencyLabel})
-                        </label>
-                        {editing ? (
-                          <input
-                            type="number"
-                            value={editedProduct.ads_cost || 0}
-                            onChange={(e) =>
-                              setEditedProduct({
-                                ...editedProduct,
-                                ads_cost: e.target.value,
-                              })
-                            }
-                            min="0"
-                            step="0.01"
-                            className="app-input w-full px-3 py-2.5 text-sm"
-                          />
-                        ) : (
-                          <p className="text-2xl font-bold text-gray-800">
-                            {formatMoney(product.ads_cost || 0)}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          تكلفة التشغيل ({currencyLabel})
-                        </label>
-                        {editing ? (
-                          <input
-                            type="number"
-                            value={editedProduct.operation_cost || 0}
-                            onChange={(e) =>
-                              setEditedProduct({
-                                ...editedProduct,
-                                operation_cost: e.target.value,
-                              })
-                            }
-                            min="0"
-                            step="0.01"
-                            className="app-input w-full px-3 py-2.5 text-sm"
-                          />
-                        ) : (
-                          <p className="text-2xl font-bold text-gray-800">
-                            {formatMoney(product.operation_cost || 0)}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          تكلفة الشحن ({currencyLabel})
-                        </label>
-                        {editing ? (
-                          <input
-                            type="number"
-                            value={editedProduct.shipping_cost || 0}
-                            onChange={(e) =>
-                              setEditedProduct({
-                                ...editedProduct,
-                                shipping_cost: e.target.value,
-                              })
-                            }
-                            min="0"
-                            step="0.01"
-                            className="app-input w-full px-3 py-2.5 text-sm"
-                          />
-                        ) : (
-                          <p className="text-2xl font-bold text-gray-800">
-                            {formatMoney(product.shipping_cost || 0)}
-                          </p>
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {isAdmin && profitabilitySnapshot.hasValues && (
-                    <div className="pt-4 border-t border-gray-200">
-                      <div
-                        className={`rounded-2xl border p-4 shadow-sm ${profitabilityTone.wrapper}`}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold">
-                              {editing ? "معاينة الربحية المباشرة" : "ملخص الربحية"}
-                            </p>
-                            <p className={`mt-1 text-xs ${profitabilityTone.subtle}`}>
-                              التكلفة تشمل سعر التكلفة والإعلانات والتشغيل والشحن
-                            </p>
-                          </div>
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${profitabilityTone.badge}`}
-                          >
-                            {profitabilitySnapshot.unitProfit >= 0
-                              ? "المنتج مربح"
-                              : "المنتج بخسارة"}
-                          </span>
-                        </div>
-
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                          <ProfitMetric
-                            label="إجمالي التكلفة لكل وحدة"
-                            value={formatMoney(
-                              profitabilitySnapshot.totalUnitCost,
-                            )}
-                            tone={profitabilityTone.subtle}
-                          />
-                          <ProfitMetric
-                            label="الربح لكل وحدة"
-                            value={formatMoney(profitabilitySnapshot.unitProfit)}
-                            tone={profitabilityTone.subtle}
-                          />
-                          <ProfitMetric
-                            label="هامش الربح"
-                            value={`${profitabilitySnapshot.profitMargin.toFixed(2)}%`}
-                            tone={profitabilityTone.subtle}
-                          />
-                          <ProfitMetric
-                            label="Saved Cost Mix / Unit"
-                            value={`${formatMoney(
-                              profitabilitySnapshot.costPrice,
-                            )} + ${formatMoney(
-                              profitabilitySnapshot.adsCost,
-                            )} + ${formatMoney(
-                              profitabilitySnapshot.operationCost,
-                            )} + ${formatMoney(
-                              profitabilitySnapshot.shippingCost,
-                            )}`}
-                            tone={profitabilityTone.subtle}
-                          />
-                          {realizedOrdersProfitability.hasData ? (
-                            <>
-                              <ProfitMetric
-                                label="Saved Costs On Fulfilled Units"
-                                value={formatMoney(
-                                  realizedOrdersProfitability.savedProductCostsTotal,
-                                )}
-                                tone={profitabilityTone.subtle}
-                              />
-                              <ProfitMetric
-                                label="Tracked Extra Costs"
-                                value={formatMoney(
-                                  realizedOrdersProfitability.totalOperationalCosts,
-                                )}
-                                tone={profitabilityTone.subtle}
-                              />
-                              <ProfitMetric
-                                label="إيراد الأوردرات الناجحة"
-                                value={formatMoney(
-                                  realizedOrdersProfitability.totalRevenue,
-                                )}
-                                tone={profitabilityTone.subtle}
-                              />
-                              <ProfitMetric
-                                label="صافي ربح الأوردرات الناجحة"
-                                value={formatMoney(
-                                  realizedOrdersProfitability.netProfit,
-                                )}
-                                tone={
-                                  realizedOrdersProfitability.netProfit >= 0
-                                    ? "text-emerald-700"
-                                    : "text-rose-700"
-                                }
-                              />
-                              <ProfitMetric
-                                label="الوحدات المتسلمة / عدد الأوردرات"
-                                value={`${formatCount(
-                                  realizedOrdersProfitability.fulfilledUnits,
-                                )} / ${formatCount(
-                                  realizedOrdersProfitability.successfulOrdersCount,
-                                )}`}
-                                tone={profitabilityTone.subtle}
-                              />
-                            </>
-                          ) : (
-                            <div className="sm:col-span-2 xl:col-span-3 rounded-xl border border-dashed border-white/70 bg-white/70 px-4 py-4 text-sm text-slate-600">
-                              {fulfilledProfitError ||
-                                "هنا هيظهر الربح المحقق من الأوردرات اللي اتعملت واتسلمت بنجاح، مش الربح المحتمل من الستوك."}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {hasMultipleVariants
-                        ? "إجمالي مخزون Shopify"
-                        : "مخزون Shopify"}
-                    </label>
-                    {editing && !hasMultipleVariants ? (
-                      <input
-                        type="number"
-                        value={editedProduct.inventory_quantity}
-                        onChange={(e) =>
-                          setEditedProduct({
-                            ...editedProduct,
-                            inventory_quantity: e.target.value,
-                          })
-                        }
-                        min="0"
-                        step="1"
-                        className="app-input w-full px-3 py-2.5 text-sm"
-                      />
-                    ) : (
-                      <>
-                        <p
-                          className={`text-2xl font-bold ${
-                            displayedInventoryQuantity > 10
-                              ? "text-green-600"
-                              : displayedInventoryQuantity > 0
-                                ? "text-yellow-600"
-                                : "text-red-600"
-                          }`}
-                        >
-                          {displayedInventoryQuantity}
-                        </p>
-                        {editing && hasMultipleVariants && (
-                          <p className="mt-2 text-sm text-slate-600">
-                            عدل مخزون Shopify لكل Variant من قسم الأشكال.
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-sm font-medium text-slate-700">
-                      مخزون المخزن
-                    </p>
-                    <p
-                      className={`mt-2 text-2xl font-bold ${
-                        displayedWarehouseInventoryQuantity > 0
-                          ? "text-emerald-600"
-                          : "text-slate-500"
-                      }`}
-                    >
-                      {displayedWarehouseInventoryQuantity}
-                    </p>
-                    <p className="mt-2 text-xs text-slate-500">
-                      هذا الرصيد يأتي من الـ warehouse/scanner ولا يتعدل من هذه الصفحة.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Product Info */}
-              <div className="app-surface rounded-[28px] p-6">
-                <h2 className="text-lg font-bold text-gray-800 mb-4">
-                  معلومات المنتج
-                </h2>
-                <div className="space-y-3">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                    SKU and inventory edits here sync to Shopify. Warehouse stock
-                    is tracked separately in Warehouse and Scanner pages.
-                  </div>
-                  {product.vendor && (
-                    <div>
-                      <p className="text-sm text-gray-600">Vendor في Shopify</p>
-                      <p className="font-semibold text-gray-800">
-                        {product.vendor}
-                      </p>
-                    </div>
-                  )}
-                  {product.product_type && (
-                    <div>
-                      <p className="text-sm text-gray-600">النوع</p>
-                      <p className="font-semibold text-gray-800">
-                        {product.product_type}
-                      </p>
-                    </div>
-                  )}
-                  {(editing && !hasMultipleVariants) || product.sku ? (
-                    <div>
-                      <p className="text-sm text-gray-600">SKU</p>
-                      {editing && !hasMultipleVariants ? (
-                        <input
-                          type="text"
-                          value={editedProduct.sku || ""}
-                          onChange={(e) =>
-                            setEditedProduct({
-                              ...editedProduct,
-                              sku: e.target.value,
-                            })
-                          }
-                          className="app-input w-full px-3 py-2.5 text-sm"
-                          placeholder="SKU-001"
-                        />
-                      ) : (
-                        <p className="font-semibold text-gray-800">
-                          {product.sku || "-"}
-                        </p>
-                      )}
-                      <p className="mt-1 text-xs text-gray-500">
-                        Primary SKU syncs to Shopify.
-                      </p>
-                    </div>
-                  ) : null}
-                  {editing && hasMultipleVariants && (
-                    <div>
-                      <p className="text-sm text-gray-600">SKU</p>
-                      <p className="font-semibold text-gray-800">
-                        Edit each variant SKU in the variants section.
-                      </p>
-                    </div>
-                  )}
-                  {(editing || product.supplier_phone) && (
-                    <div>
-                      <p className="text-sm text-gray-600">Supplier Phone</p>
-                      {editing ? (
-                        <input
-                          type="text"
-                          value={editedProduct.supplier_phone || ""}
-                          onChange={(e) =>
-                            setEditedProduct({
-                              ...editedProduct,
-                              supplier_phone: e.target.value,
-                            })
-                          }
-                          className="app-input w-full px-3 py-2.5 text-sm"
-                          placeholder="01000000000"
-                        />
-                      ) : (
-                        <p className="font-semibold text-gray-800">
-                          {product.supplier_phone || "-"}
-                        </p>
-                      )}
-                      <p className="mt-1 text-xs text-gray-500">
-                        Saved locally on this product. Not synced to Shopify.
-                      </p>
-                    </div>
-                  )}
-                  {(editing || product.supplier_location) && (
-                    <div>
-                      <p className="text-sm text-gray-600">Supplier Location</p>
-                      {editing ? (
-                        <input
-                          type="text"
-                          value={editedProduct.supplier_location || ""}
-                          onChange={(e) =>
-                            setEditedProduct({
-                              ...editedProduct,
-                              supplier_location: e.target.value,
-                            })
-                          }
-                          className="app-input w-full px-3 py-2.5 text-sm"
-                          placeholder="Warehouse, city, or supplier location"
-                        />
-                      ) : (
-                        <p className="font-semibold text-gray-800">
-                          {product.supplier_location || "-"}
-                        </p>
-                      )}
-                      <p className="mt-1 text-xs text-gray-500">
-                        Saved locally on this product. Not synced to Shopify.
-                      </p>
-                    </div>
-                  )}
-                  {product.barcode && (
-                    <div>
-                      <p className="text-sm text-gray-600">Barcode</p>
-                      <p className="font-semibold text-gray-800">
-                        {product.barcode}
-                      </p>
-                    </div>
-                  )}
-                  {product.weight && (
-                    <div>
-                      <p className="text-sm text-gray-600">الوزن</p>
-                      <p className="font-semibold text-gray-800">
-                        {product.weight} {product.weight_unit || "kg"}
-                      </p>
-                    </div>
-                  )}
-                  {product.weight_min !== undefined &&
-                    product.weight_max !== undefined && (
-                      <div>
-                        <p className="text-sm text-gray-600">نطاق الوزن</p>
-                        <p className="font-semibold text-gray-800">
-                          {product.weight_min} - {product.weight_max} جرام
-                        </p>
-                      </div>
-                    )}
-                  {product.total_shopify_inventory !== undefined && (
-                    <div>
-                      <p className="text-sm text-gray-600">إجمالي مخزون Shopify</p>
-                      <p className="font-semibold text-gray-800">
-                        {product.total_shopify_inventory} وحدة
-                      </p>
-                    </div>
-                  )}
-                  {product.total_warehouse_inventory !== undefined && (
-                    <div>
-                      <p className="text-sm text-gray-600">إجمالي مخزون المخزن</p>
-                      <p className="font-semibold text-gray-800">
-                        {product.total_warehouse_inventory} وحدة
-                      </p>
-                    </div>
-                  )}
-                  {product.requires_shipping !== undefined && (
-                    <div>
-                      <p className="text-sm text-gray-600">يتطلب شحن</p>
-                      <p className="font-semibold text-gray-800">
-                        {product.requires_shipping ? "نعم" : "لا"}
-                      </p>
-                    </div>
-                  )}
-                  {product.taxable !== undefined && (
-                    <div>
-                      <p className="text-sm text-gray-600">خاضع للضريبة</p>
-                      <p className="font-semibold text-gray-800">
-                        {product.taxable ? "نعم" : "لا"}
-                      </p>
-                    </div>
-                  )}
-                  {product.inventory_tracked !== undefined && (
-                    <div>
-                      <p className="text-sm text-gray-600">تتبع المخزون</p>
-                      <p className="font-semibold text-gray-800">
-                        {product.inventory_tracked ? "نعم" : "لا"}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Price Range */}
-              {product.price_varies && (
-                <div className="app-surface rounded-[28px] p-6">
-                  <h2 className="text-lg font-bold text-gray-800 mb-4">
-                    نطاق السعر
-                  </h2>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm text-gray-600">أقل سعر</p>
-                      <p className="text-xl font-bold text-gray-800">
-                        {formatMoney(product.price_min)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">أعلى سعر</p>
-                      <p className="text-xl font-bold text-gray-800">
-                        {formatMoney(product.price_max)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Sale Information */}
-              {product.on_sale && product.compare_at_price_min && (
-                <div className="app-surface rounded-[28px] p-6">
-                  <h2 className="text-lg font-bold text-gray-800 mb-4">
-                    معلومات التخفيض
-                  </h2>
-                  <div className="bg-red-50 rounded-lg p-4 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded">
-                        تخفيض
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">السعر الأصلي</p>
-                      <p className="text-lg font-bold text-gray-500 line-through">
-                        {formatMoney(product.compare_at_price_min)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">السعر بعد التخفيض</p>
-                      <p className="text-xl font-bold text-red-600">
-                        {formatMoney(product.price_min)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">نسبة التخفيض</p>
-                      <p className="text-lg font-bold text-red-600">
-                        {(
-                          ((product.compare_at_price_min - product.price_min) /
-                            product.compare_at_price_min) *
-                          100
-                        ).toFixed(0)}
-                        %
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tags */}
-              {product.tags && product.tags.length > 0 && (
-                <div className="app-surface rounded-[28px] p-6">
-                  <h2 className="text-lg font-bold text-gray-800 mb-4">
-                    الوسوم
-                  </h2>
-                  <div className="flex flex-wrap gap-2">
-                    {product.tags.split(",").map((tag, index) => (
-                      <span
-                        key={index}
-                        className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-                      >
-                        {tag.trim()}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Product Health */}
-              <div className="app-surface rounded-[28px] p-6">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-800">
-                      {select("صحة المنتج", "Product health")}
+                    <h2 className="text-xl font-bold text-slate-900">
+                      {select("الأشكال", "Variants")} ({variants.length})
                     </h2>
                     <p className="mt-1 text-sm text-slate-500">
                       {select(
-                        "ملخص سريع لحالة التوفر والمتابعة التشغيلية لهذا المنتج.",
-                        "A quick read on availability and operational follow-up for this product.",
+                        "تم حذف الوزن والتفاصيل الزيادة والتركيز هنا على السعر والمخزون فقط.",
+                        "Weight and extra metadata were removed so this section stays focused on price and stock.",
                       )}
                     </p>
                   </div>
-                  {isAdmin && canEditProducts && (
-                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
-                      <ShieldCheck size={14} />
-                      {select("تحكم إداري", "Admin control")}
+                  {hasMultipleVariants ? (
+                    <span className="inline-flex items-center rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                      {select(
+                        "عدّل سعر ومخزون كل شكل من هنا",
+                        "Edit each variant price and stock here",
+                      )}
                     </span>
-                  )}
+                  ) : null}
                 </div>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm text-gray-600">حالة المنتج</p>
-                    <span
-                      className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${
-                        product.status === "active"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-gray-100 text-gray-800"
-                      }`}
-                    >
-                      {product.status === "active" ? "نشط" : "غير نشط"}
-                    </span>
-                  </div>
-                  {product.published_at && (
-                    <div>
-                      <p className="text-sm text-gray-600">تاريخ النشر</p>
-                      <p className="text-gray-800 text-sm">
-                        {formatDate(product.published_at)}
-                      </p>
-                    </div>
-                  )}
-                  {product.published_scope && (
-                    <div>
-                      <p className="text-sm text-gray-600">نطاق النشر</p>
-                      <p className="text-gray-800">{product.published_scope}</p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-sm text-gray-600">حالة المخزون</p>
-                    <span
-                      className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${
-                        displayedInventoryQuantity > 10
-                          ? "bg-green-100 text-green-800"
-                          : displayedInventoryQuantity > 0
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-red-100 text-red-800"
-                      }`}
-                    >
-                      {displayedInventoryQuantity > 10
-                        ? "متوفر"
-                        : displayedInventoryQuantity > 0
-                          ? "كمية قليلة"
-                          : "نفذ من المخزون"}
-                    </span>
-                  </div>
 
-                  {isAdmin && canEditProducts && (
-                    <div className="pt-3">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex min-w-0 items-start gap-3">
-                            <div
-                              className={`mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl ${
-                                product?.suppress_low_stock_alerts
-                                  ? "bg-slate-900 text-white"
-                                  : "bg-emerald-100 text-emerald-700"
-                              }`}
-                            >
-                              {product?.suppress_low_stock_alerts ? (
-                                <BellOff size={18} />
-                              ) : (
-                                <Bell size={18} />
-                              )}
+                <div className="mt-5 space-y-4">
+                  {variants.map((variant, index) => {
+                    const variantDraft =
+                      editedVariantsById.get(String(variant.id || "")) || {};
+                    const displayedVariantPrice =
+                      editing && hasMultipleVariants
+                        ? variantDraft.price ?? variant.price
+                        : variant.price;
+                    const displayedVariantSku =
+                      editing && hasMultipleVariants
+                        ? variantDraft.sku ?? variant.sku
+                        : variant.sku;
+                    const displayedVariantInventory = toNumber(
+                      editing && hasMultipleVariants
+                        ? variantDraft.inventory_quantity ??
+                          variant.inventory_quantity
+                        : variant.inventory_quantity,
+                    );
+                    const variantStockState = getInventoryStatus(
+                      displayedVariantInventory,
+                      select,
+                    );
+
+                    return (
+                      <div
+                        key={String(variant.id || `variant-${index}`)}
+                        className="rounded-[24px] border border-slate-200 bg-white p-5"
+                      >
+                        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="text-lg font-semibold text-slate-900">
+                                {variant.title}
+                              </h3>
+                              <span
+                                className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${variantStockState.tone}`}
+                              >
+                                {variantStockState.label}
+                              </span>
                             </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-slate-900">
-                                {select(
-                                  "تنبيهات المخزون المنخفض",
-                                  "Low-stock alerts",
-                                )}
+
+                            {(displayedVariantSku || !hasMultipleVariants) && (
+                              <p className="mt-2 text-sm text-slate-600">
+                                SKU: {displayedVariantSku || "-"}
                               </p>
-                              <p className="mt-1 text-xs leading-5 text-slate-600">
-                                {product?.suppress_low_stock_alerts
-                                  ? select(
-                                      "متوقفة لهذا المنتج. سيظل المخزون ظاهرًا هنا، لكن المنتج لن يدخل في التنبيهات أو قوائم ضغط المخزون.",
-                                      "Paused for this product. Inventory still appears here, but the product stays out of alerts and stock-pressure lists.",
-                                    )
-                                  : select(
-                                      "شغالة بشكل طبيعي. المنتج يدخل في تنبيهات المخزون المنخفض وكل القوائم التشغيلية المرتبطة بها.",
-                                      "Active normally. The product participates in low-stock alerts and all related operational lists.",
-                                    )}
-                              </p>
+                            )}
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {[variant.option1, variant.option2, variant.option3]
+                                .map((value) => String(value || "").trim())
+                                .filter(Boolean)
+                                .map((value) => (
+                                  <span
+                                    key={`${variant.id || index}-${value}`}
+                                    className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
+                                  >
+                                    {value}
+                                  </span>
+                                ))}
                             </div>
                           </div>
-                          <span
-                            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                              product?.suppress_low_stock_alerts
-                                ? "bg-slate-900 text-white"
-                                : "bg-emerald-100 text-emerald-700"
-                            }`}
-                          >
-                            {product?.suppress_low_stock_alerts
-                              ? select("متوقفة", "Paused")
-                              : select("شغالة", "Active")}
-                          </span>
+
+                          <div className="w-full max-w-sm space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <StatCard
+                                label={select("سعر البيع", "Selling price")}
+                                value={formatMoney(displayedVariantPrice)}
+                              />
+                              <StatCard
+                                label={select("مخزون Shopify", "Shopify stock")}
+                                value={String(displayedVariantInventory)}
+                              />
+                            </div>
+
+                            {canPrintBarcodeLabels &&
+                            (variant.barcode || displayedVariantSku) ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openBarcodeModal(
+                                    String(
+                                      variant.id || barcodeTargets[0]?.key || "",
+                                    ),
+                                  )
+                                }
+                                className="app-button-secondary inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold text-slate-700"
+                              >
+                                <Printer size={14} />
+                                {select("طباعة ليبل", "Print label")}
+                              </button>
+                            ) : null}
+
+                            {editing && canEditProducts && hasMultipleVariants ? (
+                              <div className="space-y-3 rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                                <Field label="SKU">
+                                  <input
+                                    type="text"
+                                    value={variantDraft.sku ?? String(variant.sku || "")}
+                                    onChange={(event) =>
+                                      handleVariantFieldChange(
+                                        variant.id,
+                                        "sku",
+                                        event.target.value,
+                                      )
+                                    }
+                                    className="app-input w-full px-3 py-2.5 text-sm"
+                                    placeholder="SKU-001"
+                                  />
+                                </Field>
+
+                                <Field
+                                  label={select("سعر البيع", "Selling price")}
+                                >
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={
+                                      variantDraft.price ?? String(variant.price ?? "")
+                                    }
+                                    onChange={(event) =>
+                                      handleVariantFieldChange(
+                                        variant.id,
+                                        "price",
+                                        event.target.value,
+                                      )
+                                    }
+                                    className="app-input w-full px-3 py-2.5 text-sm"
+                                  />
+                                </Field>
+
+                                <Field
+                                  label={select("مخزون Shopify", "Shopify stock")}
+                                >
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={
+                                      variantDraft.inventory_quantity ??
+                                      String(toNumber(variant.inventory_quantity))
+                                    }
+                                    onChange={(event) =>
+                                      handleVariantFieldChange(
+                                        variant.id,
+                                        "inventory_quantity",
+                                        event.target.value,
+                                      )
+                                    }
+                                    className="app-input w-full px-3 py-2.5 text-sm"
+                                  />
+                                </Field>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
-
-                        <button
-                          type="button"
-                          onClick={toggleLowStockAlerts}
-                          disabled={lowStockAlertsSaving}
-                          className={`mt-4 flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                            product?.suppress_low_stock_alerts
-                              ? "app-button-primary text-white"
-                              : "border border-slate-300 bg-white text-slate-900 hover:bg-slate-100"
-                          }`}
-                        >
-                          {lowStockAlertsSaving ? (
-                            <RefreshCw size={16} className="animate-spin" />
-                          ) : product?.suppress_low_stock_alerts ? (
-                            <Bell size={16} />
-                          ) : (
-                            <BellOff size={16} />
-                          )}
-                          {product?.suppress_low_stock_alerts
-                            ? select(
-                                "تشغيل تنبيهات المخزون المنخفض",
-                                "Turn low-stock alerts on",
-                              )
-                            : select(
-                                "إيقاف تنبيهات المخزون المنخفض",
-                                "Turn low-stock alerts off",
-                              )}
-                        </button>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
-              </div>
+              </section>
+            </div>
 
-              {/* Sync Status */}
-              {product.last_synced_at && (
-                <div className="app-surface rounded-[28px] p-6">
-                  <h2 className="text-lg font-bold text-gray-800 mb-4">
-                    حالة المزامنة
-                  </h2>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      {getSyncStatusIcon()}
-                      <span className="text-gray-600">
-                        {product.pending_sync
-                          ? "في انتظار المزامنة"
-                          : product.sync_error
-                            ? "فشلت المزامنة"
-                            : "تمت المزامنة"}
-                      </span>
-                    </div>
-                    {product.last_synced_at && (
-                      <p className="text-gray-600">
-                        آخر مزامنة: {formatDate(product.last_synced_at)}
-                      </p>
-                    )}
-                    {product.sync_error && (
-                      <p className="text-red-600 text-xs">
-                        {product.sync_error}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Timestamps */}
-              <div className="app-surface rounded-[28px] p-6">
-                <h2 className="text-lg font-bold text-gray-800 mb-4">
-                  التواريخ
-                </h2>
-                <div className="space-y-2 text-sm">
+            <div className="space-y-6">
+              <section className="app-surface rounded-[28px] p-6">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-gray-600">تاريخ الإنشاء</p>
-                    <p className="text-gray-800">
-                      {formatDate(product.created_at)}
+                    <h2 className="text-lg font-bold text-slate-900">
+                      {select("التسعير", "Pricing")}
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {select(
+                        "تم تبسيط الشاشة لتظهر سعر البيع وسعر التكلفة فقط.",
+                        "This section now focuses on selling price and cost price only.",
+                      )}
                     </p>
                   </div>
-                  {product.updated_at && (
-                    <div>
-                      <p className="text-gray-600">آخر تحديث</p>
-                      <p className="text-gray-800">
-                        {formatDate(product.updated_at)}
-                      </p>
-                    </div>
-                  )}
-                  {product.local_updated_at && (
-                    <div>
-                      <p className="text-gray-600">آخر تحديث محلي</p>
-                      <p className="text-gray-800">
-                        {formatDate(product.local_updated_at)}
-                      </p>
-                    </div>
-                  )}
-                  {product.shopify_updated_at && (
-                    <div>
-                      <p className="text-gray-600">آخر تحديث من Shopify</p>
-                      <p className="text-gray-800">
-                        {formatDate(product.shopify_updated_at)}
-                      </p>
-                    </div>
-                  )}
+                  {hasMultipleVariants ? (
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                      {select("منتج متعدد الأشكال", "Multi-variant")}
+                    </span>
+                  ) : null}
                 </div>
-              </div>
+
+                <div className="mt-5 space-y-4">
+                  <Field label={`${select("سعر البيع", "Selling price")} (${currencyLabel})`}>
+                    {editing && !hasMultipleVariants ? (
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editedProduct.price ?? ""}
+                        onChange={(event) =>
+                          setEditedProduct((current) => ({
+                            ...current,
+                            price: event.target.value,
+                          }))
+                        }
+                        className="app-input w-full px-3 py-2.5 text-sm"
+                      />
+                    ) : (
+                      <ValueDisplay value={formatMoney(product.price)} />
+                    )}
+                  </Field>
+
+                  {isAdmin ? (
+                    <Field label={`${select("سعر التكلفة", "Cost price")} (${currencyLabel})`}>
+                      {editing ? (
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={editedProduct.cost_price ?? 0}
+                          onChange={(event) =>
+                            setEditedProduct((current) => ({
+                              ...current,
+                              cost_price: event.target.value,
+                            }))
+                          }
+                          className="app-input w-full px-3 py-2.5 text-sm"
+                        />
+                      ) : (
+                        <ValueDisplay value={formatMoney(product.cost_price || 0)} />
+                      )}
+                    </Field>
+                  ) : null}
+
+                  {hasMultipleVariants ? (
+                    <div className="rounded-[22px] border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                      {select(
+                        "سعر البيع لكل شكل يتعدل من قسم الأشكال، وسعر التكلفة الرئيسي ظاهر هنا فقط.",
+                        "Variant selling prices are edited in the variants section, while the main cost price stays here.",
+                      )}
+                    </div>
+                  ) : null}
+
+                  {isAdmin ? (
+                    <div
+                      className={`rounded-[22px] border px-4 py-4 ${
+                        estimatedUnitMargin >= 0
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                          : "border-rose-200 bg-rose-50 text-rose-900"
+                      }`}
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em]">
+                        {select("هامش تقريبي", "Estimated margin")}
+                      </p>
+                      <p className="mt-2 text-2xl font-bold">
+                        {formatMoney(estimatedUnitMargin)}
+                      </p>
+                      <p className="mt-2 text-sm">
+                        {select(
+                          "فرق مباشر بين سعر البيع وسعر التكلفة فقط.",
+                          "Direct difference between selling price and cost price only.",
+                        )}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="app-surface rounded-[28px] p-6">
+                <h2 className="text-lg font-bold text-slate-900">
+                  {select("المخزون", "Stock")}
+                </h2>
+                <div className="mt-5 space-y-4">
+                  <Field
+                    label={
+                      hasMultipleVariants
+                        ? select("إجمالي مخزون Shopify", "Total Shopify stock")
+                        : select("مخزون Shopify", "Shopify stock")
+                    }
+                  >
+                    {editing && !hasMultipleVariants ? (
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={editedProduct.inventory_quantity ?? ""}
+                        onChange={(event) =>
+                          setEditedProduct((current) => ({
+                            ...current,
+                            inventory_quantity: event.target.value,
+                          }))
+                        }
+                        className="app-input w-full px-3 py-2.5 text-sm"
+                      />
+                    ) : (
+                      <ValueDisplay value={String(displayedInventoryQuantity)} />
+                    )}
+                  </Field>
+
+                  <Field label={select("مخزون المخزن", "Warehouse stock")}>
+                    <ValueDisplay value={String(displayedWarehouseInventoryQuantity)} />
+                  </Field>
+
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      {select("حالة المخزون", "Stock state")}
+                    </p>
+                    <span
+                      className={`mt-3 inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${inventoryState.tone}`}
+                    >
+                      {inventoryState.label}
+                    </span>
+                    {displayedInventoryQuantity !==
+                    displayedWarehouseInventoryQuantity ? (
+                      <p className="mt-3 text-sm text-amber-700">
+                        {select(
+                          "يوجد فرق بين مخزون Shopify ومخزون المخزن.",
+                          "There is a difference between Shopify stock and warehouse stock.",
+                        )}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {isAdmin && canEditProducts ? (
+                    <button
+                      type="button"
+                      onClick={toggleLowStockAlerts}
+                      disabled={lowStockAlertsSaving}
+                      className="app-button-secondary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                    >
+                      {lowStockAlertsSaving ? (
+                        <RefreshCw size={16} className="animate-spin" />
+                      ) : null}
+                      {product.suppress_low_stock_alerts
+                        ? select(
+                            "تشغيل تنبيهات المخزون المنخفض",
+                            "Turn low-stock alerts on",
+                          )
+                        : select(
+                            "إيقاف تنبيهات المخزون المنخفض",
+                            "Turn low-stock alerts off",
+                          )}
+                    </button>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="app-surface rounded-[28px] p-6">
+                <h2 className="text-lg font-bold text-slate-900">
+                  {select("ملخص سريع", "Quick summary")}
+                </h2>
+                <div className="mt-5 space-y-4">
+                  {product.product_type ? (
+                    <SummaryRow
+                      label={select("النوع", "Type")}
+                      value={product.product_type}
+                    />
+                  ) : null}
+
+                  <SummaryRow
+                    label="SKU"
+                    value={
+                      hasMultipleVariants
+                        ? select(
+                            "يوجد SKU لكل شكل داخل قسم الأشكال.",
+                            "Each variant SKU is shown inside the variants section.",
+                          )
+                        : product.sku || "-"
+                    }
+                  />
+
+                  <SummaryRow
+                    label={select("الحالة", "Status")}
+                    value={
+                      product.status === "active"
+                        ? select("نشط", "Active")
+                        : select("غير نشط", "Inactive")
+                    }
+                  />
+
+                  <SummaryRow
+                    label={select("آخر تحديث", "Last update")}
+                    value={formatDate(
+                      product.local_updated_at ||
+                        product.shopify_updated_at ||
+                        product.updated_at ||
+                        product.created_at,
+                    )}
+                  />
+                </div>
+              </section>
             </div>
           </div>
         </div>
@@ -2020,11 +1203,43 @@ export default function ProductDetails() {
   );
 }
 
-function ProfitMetric({ label, value, tone }) {
+function Field({ children, label }) {
   return (
-    <div className="rounded-xl bg-white/75 px-4 py-3 shadow-sm shadow-black/5">
-      <p className="text-xs font-semibold text-slate-500">{label}</p>
-      <p className={`mt-2 text-lg font-bold ${tone}`}>{value}</p>
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-slate-700">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function ValueDisplay({ value }) {
+  return (
+    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-lg font-semibold text-slate-900">
+      {value}
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-2 text-lg font-semibold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }) {
+  return (
+    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-2 text-sm font-medium text-slate-900">{value}</p>
     </div>
   );
 }

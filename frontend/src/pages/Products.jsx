@@ -45,23 +45,15 @@ import { normalizeBarcodeVariantTitle } from "../utils/barcodeLabels";
 import {
   buildCatalogCounts,
   buildVariantRows,
-  getNormalizedDateRange,
   toNumber,
 } from "../utils/productsView";
 
 const INITIAL_FILTERS = {
   searchTerm: "",
-  vendor: "all",
   productType: "all",
   stockStatus: "all",
-  syncStatus: "all",
   minPrice: "",
   maxPrice: "",
-  minInventory: "",
-  maxInventory: "",
-  updatedFrom: "",
-  updatedTo: "",
-  profitability: "all",
   sortBy: "updated_desc",
 };
 const SUPPORTED_STOCK_STATUS_FILTERS = new Set([
@@ -115,18 +107,6 @@ const PRODUCT_FILTER_LABELS = {
     in_stock: "In stock",
     low_stock: "Low stock",
     out_of_stock: "Out of stock",
-  },
-  syncStatus: {
-    synced: "Synced",
-    pending: "Pending",
-    failed: "Failed",
-    never: "Never",
-  },
-  profitability: {
-    profitable: "Profitable",
-    loss: "Loss",
-    break_even: "Break-even",
-    no_cost: "No cost",
   },
 };
 const isProductsRelatedSharedUpdate = (event) => {
@@ -376,18 +356,6 @@ export default function Products() {
     [isAdmin, products],
   );
 
-  const vendorOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          variantRows
-            .map((variant) => String(variant.vendor || "").trim())
-            .filter(Boolean),
-        ),
-      ).sort((a, b) => a.localeCompare(b)),
-    [variantRows],
-  );
-
   const typeOptions = useMemo(
     () =>
       Array.from(
@@ -398,11 +366,6 @@ export default function Products() {
         ),
       ).sort((a, b) => a.localeCompare(b)),
     [variantRows],
-  );
-
-  const normalizedUpdatedRange = useMemo(
-    () => getNormalizedDateRange(filters.updatedFrom, filters.updatedTo),
-    [filters.updatedFrom, filters.updatedTo],
   );
 
   const filteredVariants = useMemo(() => {
@@ -427,14 +390,6 @@ export default function Products() {
       });
     }
 
-    if (filters.vendor !== "all") {
-      result = result.filter(
-        (variant) =>
-          String(variant.vendor || "").toLowerCase() ===
-          String(filters.vendor || "").toLowerCase(),
-      );
-    }
-
     if (filters.productType !== "all") {
       result = result.filter(
         (variant) =>
@@ -449,12 +404,6 @@ export default function Products() {
       );
     }
 
-    if (filters.syncStatus !== "all") {
-      result = result.filter(
-        (variant) => variant._meta.syncState === filters.syncStatus,
-      );
-    }
-
     if (filters.minPrice) {
       const minPrice = toNumber(filters.minPrice);
       result = result.filter((variant) => toNumber(variant.price) >= minPrice);
@@ -463,42 +412,6 @@ export default function Products() {
     if (filters.maxPrice) {
       const maxPrice = toNumber(filters.maxPrice);
       result = result.filter((variant) => toNumber(variant.price) <= maxPrice);
-    }
-
-    if (filters.minInventory) {
-      const minInventory = toNumber(filters.minInventory);
-      result = result.filter(
-        (variant) => toNumber(variant.inventory_quantity) >= minInventory,
-      );
-    }
-
-    if (filters.maxInventory) {
-      const maxInventory = toNumber(filters.maxInventory);
-      result = result.filter(
-        (variant) => toNumber(variant.inventory_quantity) <= maxInventory,
-      );
-    }
-
-    if (normalizedUpdatedRange.from) {
-      result = result.filter(
-        (variant) =>
-          variant._meta.updatedAt &&
-          variant._meta.updatedAt >= normalizedUpdatedRange.from,
-      );
-    }
-
-    if (normalizedUpdatedRange.to) {
-      result = result.filter(
-        (variant) =>
-          variant._meta.updatedAt &&
-          variant._meta.updatedAt <= normalizedUpdatedRange.to,
-      );
-    }
-
-    if (isAdmin && filters.profitability !== "all") {
-      result = result.filter(
-        (variant) => variant._meta.profitabilityState === filters.profitability,
-      );
     }
 
     result.sort((a, b) => {
@@ -542,14 +455,10 @@ export default function Products() {
     deferredSearchTerm,
     filters,
     isAdmin,
-    normalizedUpdatedRange,
     variantRows,
   ]);
 
   const summary = useMemo(() => {
-    const outOfStock = filteredVariants.filter(
-      (variant) => variant._meta.stockState === "out_of_stock",
-    ).length;
     const lowStock = filteredVariants.filter(
       (variant) => variant._meta.stockState === "low_stock",
     ).length;
@@ -557,9 +466,6 @@ export default function Products() {
       (sum, variant) => sum + toNumber(variant.inventory_quantity),
       0,
     );
-    const syncedCount = filteredVariants.filter(
-      (variant) => variant._meta.syncState === "synced",
-    ).length;
     const uniqueProducts = new Set(
       filteredVariants.map((variant) => String(variant.id || "")),
     ).size;
@@ -567,10 +473,8 @@ export default function Products() {
     return {
       totalVariants: filteredVariants.length,
       uniqueProducts,
-      outOfStock,
       lowStock,
       totalInventory,
-      syncedCount,
     };
   }, [filteredVariants]);
 
@@ -587,9 +491,6 @@ export default function Products() {
     if (filters.searchTerm.trim()) {
       chips.push(`Search: ${filters.searchTerm.trim()}`);
     }
-    if (filters.vendor !== "all") {
-      chips.push(`Vendor: ${filters.vendor}`);
-    }
     if (filters.productType !== "all") {
       chips.push(`Type: ${filters.productType}`);
     }
@@ -601,42 +502,15 @@ export default function Products() {
         }`,
       );
     }
-    if (filters.syncStatus !== "all") {
-      chips.push(
-        `Sync: ${
-          PRODUCT_FILTER_LABELS.syncStatus[filters.syncStatus] ||
-          filters.syncStatus
-        }`,
-      );
-    }
     if (filters.minPrice) {
       chips.push(`Price >= ${filters.minPrice}`);
     }
     if (filters.maxPrice) {
       chips.push(`Price <= ${filters.maxPrice}`);
     }
-    if (filters.minInventory) {
-      chips.push(`Inventory >= ${filters.minInventory}`);
-    }
-    if (filters.maxInventory) {
-      chips.push(`Inventory <= ${filters.maxInventory}`);
-    }
-    if (filters.updatedFrom || filters.updatedTo) {
-      chips.push(
-        `Updated: ${filters.updatedFrom || "Start"} -> ${filters.updatedTo || "Now"}`,
-      );
-    }
-    if (isAdmin && filters.profitability !== "all") {
-      chips.push(
-        `Profitability: ${
-          PRODUCT_FILTER_LABELS.profitability[filters.profitability] ||
-          filters.profitability
-        }`,
-      );
-    }
 
     return chips;
-  }, [filters, isAdmin]);
+  }, [filters]);
 
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -718,7 +592,10 @@ export default function Products() {
         ? `/products/${productId}?mode=edit`
         : `/products/${productId}`;
 
-    window.open(href, "_blank", "noopener,noreferrer");
+    const openedWindow = window.open(href, "_blank", "noopener,noreferrer");
+    if (!openedWindow) {
+      window.location.assign(href);
+    }
   }, []);
 
   const openBarcodeLabelModal = useCallback(
@@ -879,7 +756,7 @@ export default function Products() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <SummaryCard
               label={select(
                 "\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a",
@@ -924,33 +801,17 @@ export default function Products() {
               icon={AlertCircle}
               color="from-amber-500 to-amber-700"
             />
-            <SummaryCard
-              label="Shopify OOS"
-              value={formatNumber(summary.outOfStock, {
-                maximumFractionDigits: 0,
-              })}
-              icon={AlertCircle}
-              color="from-rose-500 to-rose-700"
-            />
-            <SummaryCard
-              label="Synced"
-              value={formatNumber(summary.syncedCount, {
-                maximumFractionDigits: 0,
-              })}
-              icon={CheckCircle}
-              color="from-cyan-500 to-cyan-700"
-            />
           </div>
 
           <div className="bg-white rounded-xl shadow p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
-                  Product & Variant Filters
+                  Product Filters
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Filters apply to the variant cards and product totals update
-                  with them.
+                  The page now keeps only the most useful filters so browsing
+                  products stays quick and light.
                 </p>
               </div>
               <button
@@ -994,12 +855,6 @@ export default function Products() {
                   total variants
                 </span>
               </div>
-              {normalizedUpdatedRange.wasSwapped && (
-                <p className="mt-2 text-xs text-amber-700">
-                  Date range was auto-corrected because From Date was later than
-                  To Date.
-                </p>
-              )}
               {activeFilterChips.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {activeFilterChips.map((chip) => (
@@ -1014,7 +869,7 @@ export default function Products() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
               <div className="xl:col-span-2">
                 <label className="block text-xs text-slate-500 mb-1">
                   Search
@@ -1034,26 +889,6 @@ export default function Products() {
                     className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
-                  Vendor
-                </label>
-                <select
-                  value={filters.vendor}
-                  onChange={(event) =>
-                    handleFilterChange("vendor", event.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                >
-                  <option value="all">All</option>
-                  {vendorOptions.map((vendor) => (
-                    <option key={vendor} value={vendor}>
-                      {vendor}
-                    </option>
-                  ))}
-                </select>
               </div>
 
               <div>
@@ -1096,25 +931,6 @@ export default function Products() {
 
               <div>
                 <label className="block text-xs text-slate-500 mb-1">
-                  Sync
-                </label>
-                <select
-                  value={filters.syncStatus}
-                  onChange={(event) =>
-                    handleFilterChange("syncStatus", event.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                >
-                  <option value="all">All</option>
-                  <option value="synced">Synced</option>
-                  <option value="pending">Pending</option>
-                  <option value="failed">Failed</option>
-                  <option value="never">Never</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
                   Price Min
                 </label>
                 <input
@@ -1143,62 +959,6 @@ export default function Products() {
 
               <div>
                 <label className="block text-xs text-slate-500 mb-1">
-                  Inventory Min
-                </label>
-                <input
-                  type="number"
-                  value={filters.minInventory}
-                  onChange={(event) =>
-                    handleFilterChange("minInventory", event.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
-                  Inventory Max
-                </label>
-                <input
-                  type="number"
-                  value={filters.maxInventory}
-                  onChange={(event) =>
-                    handleFilterChange("maxInventory", event.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
-                  Updated From
-                </label>
-                <input
-                  type="date"
-                  value={filters.updatedFrom}
-                  onChange={(event) =>
-                    handleFilterChange("updatedFrom", event.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
-                  Updated To
-                </label>
-                <input
-                  type="date"
-                  value={filters.updatedTo}
-                  onChange={(event) =>
-                    handleFilterChange("updatedTo", event.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
                   Sort
                 </label>
                 <select
@@ -1218,27 +978,6 @@ export default function Products() {
                   <option value="inventory_asc">Inventory low-high</option>
                 </select>
               </div>
-
-              {isAdmin && (
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">
-                    Profitability
-                  </label>
-                  <select
-                    value={filters.profitability}
-                    onChange={(event) =>
-                      handleFilterChange("profitability", event.target.value)
-                    }
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                  >
-                    <option value="all">All</option>
-                    <option value="profitable">Profitable</option>
-                    <option value="loss">Loss</option>
-                    <option value="break_even">Break-even</option>
-                    <option value="no_cost">No cost</option>
-                  </select>
-                </div>
-              )}
             </div>
           </div>
 
@@ -1338,6 +1077,17 @@ export default function Products() {
                         label="Price"
                         value={formatAmount(variant.price)}
                       />
+                      {isAdmin ? (
+                        <DetailItem
+                          label="Cost"
+                          value={
+                            variant.cost_price !== undefined &&
+                            variant.cost_price !== null
+                              ? formatAmount(variant.cost_price)
+                              : "-"
+                          }
+                        />
+                      ) : null}
                       <DetailItem
                         label="Shopify"
                         value={formatNumber(
@@ -1369,10 +1119,6 @@ export default function Products() {
                         }
                       />
                       <DetailItem label="SKU" value={variant.sku || "-"} />
-                      <DetailItem
-                        label="Updated"
-                        value={formatDateTime(variant.updated_at)}
-                      />
                     </div>
 
                     {toNumber(variant.shopify_inventory_quantity) !==
@@ -1382,27 +1128,6 @@ export default function Products() {
                         variant.
                       </div>
                     ) : null}
-
-                    {(variant.vendor || variant.barcode) && (
-                      <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 space-y-2">
-                        {variant.vendor && (
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-slate-500">Vendor</span>
-                            <span className="font-medium text-right">
-                              {variant.vendor}
-                            </span>
-                          </div>
-                        )}
-                        {variant.barcode && (
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-slate-500">Barcode</span>
-                            <span className="font-medium text-right break-all">
-                              {variant.barcode}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
 
                     {variant.option_values.length > 0 && (
                       <div className="flex flex-wrap gap-2">
@@ -1416,35 +1141,6 @@ export default function Products() {
                         ))}
                       </div>
                     )}
-
-                    {variant.compare_at_price &&
-                      toNumber(variant.compare_at_price) > 0 && (
-                        <div className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600">
-                          Compare at:{" "}
-                          <span className="font-semibold text-slate-900">
-                            {formatAmount(variant.compare_at_price)}
-                          </span>
-                        </div>
-                      )}
-
-                    {isAdmin &&
-                      variant.cost_price !== undefined &&
-                      variant.cost_price !== null && (
-                        <div className="bg-emerald-50 rounded-lg p-3 text-sm text-emerald-900">
-                          <div className="flex items-center justify-between gap-3">
-                            <span>Unit profit</span>
-                            <span className="font-bold">
-                              {formatAmount(
-                                toNumber(variant.price) -
-                                  (toNumber(variant.cost_price) +
-                                    toNumber(variant.ads_cost || 0) +
-                                    toNumber(variant.operation_cost || 0) +
-                                    toNumber(variant.shipping_cost || 0)),
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                      )}
 
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       {canPrintBarcodeLabels ? (
