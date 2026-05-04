@@ -33,10 +33,26 @@ const resolveBackendApiBaseUrl = () => {
   return ensureApiPath(configured || DEFAULT_BACKEND_API_BASE_URL);
 };
 
+const isLoopingBaseUrl = (baseUrl, requestHost) => {
+  try {
+    const targetHost = String(new URL(baseUrl).host || "").toLowerCase();
+    const sourceHost = String(requestHost || "").toLowerCase();
+    if (!targetHost || !sourceHost) {
+      return false;
+    }
+    return targetHost === sourceHost;
+  } catch {
+    return false;
+  }
+};
+
 const buildTargetUrl = (req) => {
-  const base = resolveBackendApiBaseUrl();
+  const configuredBase = resolveBackendApiBaseUrl();
+  const safeBase = isLoopingBaseUrl(configuredBase, req.headers.host)
+    ? DEFAULT_BACKEND_API_BASE_URL
+    : configuredBase;
   const rawPath = String(req.query?.path || "").trim();
-  const url = new URL(`${base}/${rawPath}`);
+  const url = new URL(`${safeBase}/${rawPath}`);
 
   Object.entries(req.query || {}).forEach(([key, value]) => {
     if (key === "path") return;

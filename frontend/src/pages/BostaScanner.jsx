@@ -176,6 +176,12 @@ export default function BostaScanner() {
         }
       }
 
+      // If the shipment is not linked to an internal order yet, fallback to COD
+      // so the scanner still reflects a realistic collected amount.
+      if (revenue <= 0) {
+        revenue = parseAmount(shipment.cod_amount);
+      }
+
       const netProfit = revenue - totalCost;
       const realNetProfit = netProfit - shippingCost;
 
