@@ -90,9 +90,27 @@ export default function BostaScanner() {
         return;
       }
 
-      // Get shipment details from Bosta
-      const response = await api.get(`/bosta/shipments/${trimmedBarcode}`);
-      const shipment = response.data;
+      // Get shipment details - try backend first, then Vercel function as fallback
+      let shipment;
+      try {
+        const response = await api.get(`/bosta/shipments/${trimmedBarcode}`);
+        shipment = response.data;
+      } catch (apiError) {
+        // Fallback to Vercel serverless function if backend fails
+        console.log("Backend failed, trying Vercel function");
+        try {
+          const vercelResponse = await fetch(
+            `/api/bosta-shipment?trackingNumber=${trimmedBarcode}`,
+          );
+          if (!vercelResponse.ok) {
+            throw new Error(`HTTP ${vercelResponse.status}`);
+          }
+          shipment = await vercelResponse.json();
+        } catch (vercelError) {
+          console.error("Both backend and Vercel function failed");
+          throw apiError; // Re-throw original error
+        }
+      }
 
       if (!shipment) {
         setError(select("الشحنة غير موجودة", "Shipment not found"));
