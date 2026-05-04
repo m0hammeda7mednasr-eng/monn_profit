@@ -42,6 +42,25 @@ const requireBostaService = (req, res, next) => {
   next();
 };
 
+const fetchPublicTrackingShipment = async (trackingNumber) => {
+  const publicTracking =
+    await BostaService.fetchPublicTrackingStatus(trackingNumber);
+  return BostaService.formatPublicTrackingShipment(
+    publicTracking,
+    trackingNumber,
+  );
+};
+
+const isTrackingNotFoundError = (error) => {
+  const message = error?.message || "";
+  return (
+    message.includes("404") ||
+    message.includes("not valid JSON") ||
+    message.includes("non-JSON response") ||
+    message.includes("<!DOCTYPE")
+  );
+};
+
 /**
  * GET /api/bosta/config
  * Get Bosta configuration status
@@ -455,12 +474,18 @@ router.get(
         return res.json(shipment);
       }
 
-      // If not found in database, try to fetch from Bosta API
+      // If not found in database, try Bosta's public tracking server first when
+      // the business API is unavailable.
       if (!bostaService) {
-        return res.status(404).json({
-          error:
-            "Shipment not found in database and Bosta service not configured",
-        });
+        try {
+          return res.json(await fetchPublicTrackingShipment(trackingNumber));
+        } catch (publicTrackingError) {
+          return res.status(404).json({
+            error:
+              "Shipment not found in database and Bosta service not configured",
+            message: publicTrackingError.message,
+          });
+        }
       }
 
       try {
@@ -485,13 +510,17 @@ router.get(
       } catch (bostaError) {
         console.error("Failed to fetch from Bosta API:", bostaError);
 
+        try {
+          return res.json(await fetchPublicTrackingShipment(trackingNumber));
+        } catch (publicTrackingError) {
+          console.error(
+            "Failed to fetch from Bosta public tracking:",
+            publicTrackingError,
+          );
+        }
+
         // Check if it's a 404 or invalid tracking number
-        const errorMessage = bostaError.message || "";
-        if (
-          errorMessage.includes("404") ||
-          errorMessage.includes("not valid JSON") ||
-          errorMessage.includes("<!DOCTYPE")
-        ) {
+        if (isTrackingNotFoundError(bostaError)) {
           return res.status(404).json({
             error: "Tracking number not found",
             message:

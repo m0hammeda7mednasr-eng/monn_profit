@@ -226,6 +226,79 @@ describe("BostaService", () => {
       );
       expect(bostaService.getStateLabel(999)).toBe("Unknown");
     });
+
+    test("should use public tracking state names when provided", () => {
+      expect(BostaService.getStateLabel(41, "OUT_FOR_DELIVERY")).toBe(
+        "Out for Delivery",
+      );
+    });
+  });
+
+  describe("Public Tracking", () => {
+    test("fetchPublicTrackingStatus should call Bosta tracking server", async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              TrackingNumber: "6825760892",
+              CurrentStatus: {
+                state: "OUT_FOR_DELIVERY",
+                code: 41,
+              },
+            }),
+          ),
+      });
+
+      const result =
+        await BostaService.fetchPublicTrackingStatus("6825760892");
+
+      expect(fetch).toHaveBeenCalledWith(
+        "https://tracking.bosta.co/shipments/track/6825760892",
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.objectContaining({
+            Accept: "application/json",
+          }),
+        }),
+      );
+      expect(result.TrackingNumber).toBe("6825760892");
+    });
+
+    test("formatPublicTrackingShipment should match scanner schema", () => {
+      const shipment = BostaService.formatPublicTrackingShipment(
+        {
+          provider: "Bosta",
+          TrackingNumber: "6825760892",
+          CurrentStatus: {
+            state: "OUT_FOR_DELIVERY",
+            code: 41,
+            timestamp: "2026-05-04T06:45:07.989Z",
+          },
+          PromisedDate: "2026-05-04T20:59:59.999Z",
+          TransitEvents: [
+            {
+              state: "TICKET_CREATED",
+              code: 10,
+              timestamp: "2026-05-01T14:49:17.990Z",
+            },
+          ],
+        },
+        "6825760892",
+      );
+
+      expect(shipment).toEqual(
+        expect.objectContaining({
+          tracking_number: "6825760892",
+          delivery_state: 41,
+          delivery_state_label: "Out for Delivery",
+          is_delivered: false,
+          order_id: null,
+        }),
+      );
+      expect(shipment.tracking_events).toHaveLength(1);
+    });
   });
 
   describe("API Methods", () => {

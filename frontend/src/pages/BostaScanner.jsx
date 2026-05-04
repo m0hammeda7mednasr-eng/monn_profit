@@ -398,13 +398,20 @@ export default function BostaScanner() {
                         <td className="px-4 py-3 text-sm">
                           <span
                             className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                              item.delivery_state === 40
+                              item.delivery_state === 40 ||
+                              item.delivery_state === 45
                                 ? "bg-green-100 text-green-800"
-                                : item.delivery_state === 30
+                                : item.delivery_state === 30 ||
+                                    item.delivery_state === 41
                                   ? "bg-blue-100 text-blue-800"
-                                  : item.delivery_state === 47
+                                  : item.delivery_state === 47 ||
+                                      item.delivery_state === 100 ||
+                                      item.delivery_state === 101
                                     ? "bg-red-100 text-red-800"
-                                    : item.delivery_state === 50
+                                    : item.delivery_state === 48 ||
+                                        item.delivery_state === 49 ||
+                                        item.delivery_state === 50 ||
+                                        item.delivery_state === 60
                                       ? "bg-gray-100 text-gray-800"
                                       : "bg-yellow-100 text-yellow-800"
                             }`}

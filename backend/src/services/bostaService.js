@@ -7,6 +7,7 @@
 import { supabase } from "../supabaseClient.js";
 
 const DEFAULT_BOSTA_API_BASE_URL = "https://app.bosta.co/api/v2";
+const DEFAULT_BOSTA_TRACKING_BASE_URL = "https://tracking.bosta.co";
 
 const normalizeBaseUrl = (value) =>
   String(value || DEFAULT_BOSTA_API_BASE_URL)
@@ -174,6 +175,76 @@ class BostaService {
     return await this.makeRequest(endpoint, {
       method: "GET",
     });
+  }
+
+  /**
+   * Get public shipment tracking from Bosta's tracking server.
+   * This endpoint is what Bosta's public tracking page uses and does not require
+   * a business API key, so it is a useful fallback for customer-facing scans.
+   */
+  static async fetchPublicTrackingStatus(
+    trackingNumber,
+    {
+      baseUrl = process.env.BOSTA_TRACKING_BASE_URL,
+      timeoutMs = process.env.BOSTA_TRACKING_TIMEOUT_MS,
+    } = {},
+  ) {
+    const normalizedTrackingNumber = String(trackingNumber || "").trim();
+    if (!normalizedTrackingNumber) {
+      throw new Error("Tracking number is required");
+    }
+
+    const parsedTimeoutMs = parsePositiveInteger(timeoutMs, 15000);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), parsedTimeoutMs);
+    const trackingBaseUrl = normalizeBaseUrl(
+      baseUrl || DEFAULT_BOSTA_TRACKING_BASE_URL,
+    );
+    const url = `${trackingBaseUrl}/shipments/track/${encodeURIComponent(
+      normalizedTrackingNumber,
+    )}`;
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+        signal: controller.signal,
+      });
+      const text = await response.text();
+      let data = null;
+
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        throw new Error(
+          `Bosta tracking returned a non-JSON response (${response.status})`,
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `Bosta tracking error: ${response.status} - ${
+            data?.message || data?.error || "Unknown error"
+          }`,
+        );
+      }
+
+      return data;
+    } catch (error) {
+      const message =
+        error.name === "AbortError"
+          ? `Bosta tracking request timed out after ${parsedTimeoutMs}ms`
+          : error.message;
+      throw new Error(message);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async getPublicTrackingStatus(trackingNumber) {
+    return BostaService.fetchPublicTrackingStatus(trackingNumber);
   }
 
   /**
@@ -516,6 +587,31 @@ class BostaService {
    * Get state label for delivery state
    */
   getStateLabel(state) {
+    return BostaService.getStateLabel(state);
+  }
+
+  static formatStateName(stateName) {
+    const smallWords = new Set(["at", "for", "in", "of", "to"]);
+    return String(stateName || "")
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word, index) =>
+        index > 0 && smallWords.has(word)
+          ? word
+          : word.charAt(0).toUpperCase() + word.slice(1),
+      )
+      .join(" ");
+  }
+
+  static getStateLabel(state, fallbackStateName) {
+    if (fallbackStateName) {
+      return BostaService.formatStateName(fallbackStateName);
+    }
+
+    const normalizedState = Number(state);
     const labels = {
       [BOSTA_DELIVERY_STATES.PENDING]: "Pending",
       [BOSTA_DELIVERY_STATES.PICKED_UP]: "Picked Up",
@@ -525,9 +621,98 @@ class BostaService {
       [BOSTA_DELIVERY_STATES.EXCEPTION]: "Exception",
       [BOSTA_DELIVERY_STATES.CANCELLED]: "Cancelled",
       [BOSTA_DELIVERY_STATES.RETURNED]: "Returned",
+      21: "Picked Up",
+      22: "Heading to Customer",
+      23: "Picked Up",
+      24: "Received at Warehouse",
+      25: "Fulfilled",
+      41: "Out for Delivery",
+      45: "Delivered",
+      46: "Returned to Business",
+      48: "Terminated",
+      49: "Cancelled",
+      100: "Lost",
+      101: "Damaged",
+      102: "Investigation",
+      103: "Awaiting Your Action",
+      104: "Archived",
+      105: "On Hold",
     };
 
-    return labels[state] || "Unknown";
+    return labels[normalizedState] || "Unknown";
+  }
+
+  static isDeliveredState(state, stateName) {
+    const normalizedState = Number(state);
+    const normalizedStateName = String(stateName || "").toUpperCase();
+    return (
+      normalizedState === BOSTA_DELIVERY_STATES.DELIVERED ||
+      normalizedState === 45 ||
+      normalizedStateName === "DELIVERED"
+    );
+  }
+
+  static isCancelledState(state, stateName) {
+    const normalizedState = Number(state);
+    const normalizedStateName = String(stateName || "").toUpperCase();
+    return (
+      normalizedState === BOSTA_DELIVERY_STATES.CANCELLED ||
+      normalizedState === 49 ||
+      normalizedState === 48 ||
+      normalizedStateName === "CANCELLED" ||
+      normalizedStateName === "CANCELED" ||
+      normalizedStateName === "TERMINATED"
+    );
+  }
+
+  static isReturnedState(state, stateName) {
+    const normalizedState = Number(state);
+    const normalizedStateName = String(stateName || "").toUpperCase();
+    return (
+      normalizedState === BOSTA_DELIVERY_STATES.RETURNED ||
+      normalizedState === 46 ||
+      normalizedStateName.includes("RETURNED")
+    );
+  }
+
+  static formatPublicTrackingShipment(publicTracking, trackingNumber) {
+    const currentStatus = publicTracking?.CurrentStatus || {};
+    const transitEvents = Array.isArray(publicTracking?.TransitEvents)
+      ? publicTracking.TransitEvents
+      : [];
+    const currentCode = Number(currentStatus.code || 0);
+    const currentState = currentStatus.state;
+    const trackingEvents = transitEvents.map((event) => ({
+      state: event.state,
+      code: event.code,
+      label: BostaService.getStateLabel(event.code, event.state),
+      timestamp: event.timestamp,
+    }));
+
+    return {
+      tracking_number: publicTracking?.TrackingNumber || trackingNumber,
+      delivery_id: publicTracking?._id || null,
+      order_id: null,
+      bosta_order_type: publicTracking?.type || null,
+      delivery_state: currentCode,
+      delivery_state_label: BostaService.getStateLabel(
+        currentCode,
+        currentState,
+      ),
+      expected_shipping_cost: 0,
+      cod_amount: Number(publicTracking?.cod || 0),
+      is_delivered: BostaService.isDeliveredState(currentCode, currentState),
+      is_cancelled: BostaService.isCancelledState(currentCode, currentState),
+      is_returned: BostaService.isReturnedState(currentCode, currentState),
+      created_at: transitEvents[0]?.timestamp || null,
+      updated_at: currentStatus.timestamp || null,
+      last_status_update: currentStatus.timestamp || null,
+      delivery_promise_date: publicTracking?.PromisedDate || null,
+      tracking_url: publicTracking?.TrackingURL || null,
+      support_phone_numbers: publicTracking?.SupportPhoneNumbers || [],
+      tracking_events: trackingEvents,
+      bosta_response: publicTracking,
+    };
   }
 }
 
