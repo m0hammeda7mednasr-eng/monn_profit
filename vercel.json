@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://monnprofit-production.up.railway.app/api/$1"
+      "destination": "https://moon-profit-production.up.railway.app/api/$1"
     },
     {
       "source": "/(.*)",
