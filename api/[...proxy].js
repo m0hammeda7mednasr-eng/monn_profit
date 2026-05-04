@@ -1,5 +1,5 @@
 const DEFAULT_BACKEND_API_BASE_URL =
-  "https://moon-profit-production.up.railway.app/api";
+  "https://monnprofit-production.up.railway.app/api";
 
 const normalizeApiBaseUrl = (value) =>
   String(value || "")
