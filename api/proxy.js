@@ -6,12 +6,31 @@ const normalizeApiBaseUrl = (value) =>
     .trim()
     .replace(/\/+$/, "");
 
+const ensureApiPath = (value) => {
+  const normalized = normalizeApiBaseUrl(value);
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    const url = new URL(normalized);
+    const pathname = String(url.pathname || "").replace(/\/+$/, "");
+    if (!pathname || pathname === "/") {
+      url.pathname = "/api";
+    }
+    return normalizeApiBaseUrl(url.toString());
+  } catch {
+    // Keep relative paths unchanged.
+    return normalized;
+  }
+};
+
 const resolveBackendApiBaseUrl = () => {
   const configured =
     process.env.BACKEND_API_BASE_URL ||
     process.env.RAILWAY_API_BASE_URL ||
     process.env.RENDER_API_BASE_URL;
-  return normalizeApiBaseUrl(configured || DEFAULT_BACKEND_API_BASE_URL);
+  return ensureApiPath(configured || DEFAULT_BACKEND_API_BASE_URL);
 };
 
 const buildTargetUrl = (req) => {
