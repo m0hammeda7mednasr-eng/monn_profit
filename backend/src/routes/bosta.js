@@ -142,7 +142,9 @@ const getTrackingValidationResponse = (value, options) => {
   return {
     trackingNumber,
     status: isDemoTrackingNumber(trackingNumber) ? 410 : 400,
-    error: trackingNumber ? "Demo tracking disabled" : "Tracking number is required",
+    error: trackingNumber
+      ? "Demo tracking disabled"
+      : "Tracking number is required",
     message: validationError,
   };
 };
@@ -163,7 +165,9 @@ const isSchemaCompatibilityError = (error) => {
     return false;
   }
 
-  const code = String(error.code || "").trim().toUpperCase();
+  const code = String(error.code || "")
+    .trim()
+    .toUpperCase();
   if (SCHEMA_ERROR_CODES.has(code)) {
     return true;
   }
@@ -510,7 +514,9 @@ const collectTrackingValues = (value, results = []) => {
     });
   }
 
-  Object.values(value).forEach((entry) => collectTrackingValues(entry, results));
+  Object.values(value).forEach((entry) =>
+    collectTrackingValues(entry, results),
+  );
   return results;
 };
 
@@ -610,7 +616,9 @@ const getShopifyTokenCandidates = async (req) => {
   const requestedStoreId = getRequestedStoreId(req);
   const normalizedRequestedStoreId = normalizeId(requestedStoreId);
   const isAdmin = isAdminRequest(req);
-  const accessibleStoreIds = isAdmin ? [] : await getAccessibleStoreIds(req.user.id);
+  const accessibleStoreIds = isAdmin
+    ? []
+    : await getAccessibleStoreIds(req.user.id);
   const scopedStoreIds = normalizedRequestedStoreId
     ? [normalizedRequestedStoreId]
     : accessibleStoreIds;
@@ -659,7 +667,10 @@ const fetchShopifyOrderByReference = async ({
       ].filter(Boolean),
     ),
   );
-  if (referenceCandidates.length === 0 && trackingSearchCandidates.length === 0) {
+  if (
+    referenceCandidates.length === 0 &&
+    trackingSearchCandidates.length === 0
+  ) {
     return null;
   }
 
@@ -771,7 +782,8 @@ const indexProductsForCostLookup = (products = []) => {
             (entry) =>
               entry &&
               normalizeProductTitle(entry) !== "default title" &&
-              normalizeProductTitle(entry) !== normalizeProductTitle(product?.title),
+              normalizeProductTitle(entry) !==
+                normalizeProductTitle(product?.title),
           )
           .join(" - "),
         { product, variant },
@@ -782,7 +794,8 @@ const indexProductsForCostLookup = (products = []) => {
             (entry) =>
               entry &&
               normalizeProductTitle(entry) !== "default title" &&
-              normalizeProductTitle(entry) !== normalizeProductTitle(product?.title),
+              normalizeProductTitle(entry) !==
+                normalizeProductTitle(product?.title),
           )
           .join(" "),
         { product, variant },
@@ -956,10 +969,7 @@ const getPricingShippingFeeAmount = (pricing = {}) => {
     return 0;
   }
 
-  return getFirstPositiveAmount([
-    pricing?.shippingFee,
-    pricing?.shipping_fee,
-  ]);
+  return getFirstPositiveAmount([pricing?.shippingFee, pricing?.shipping_fee]);
 };
 
 const getPricingAmountFromLogs = (delivery = {}) => {
@@ -1199,10 +1209,29 @@ const enrichShipmentWithOrderData = async ({
     });
 
     if (!liveShopifyOrder) {
-      return shipment;
+      // Return shipment with basic financial data from COD and shipping cost
+      const codAmount = toNumber(
+        shipment?.cod_amount || shipment?.revenue || 0,
+      );
+      const shippingCost = toNumber(
+        shipment?.expected_shipping_cost || shipment?.shipping_cost || 0,
+      );
+
+      return {
+        ...shipment,
+        revenue: codAmount,
+        total_cost: 0,
+        shipping_cost: shippingCost,
+        net_profit: codAmount,
+        real_net_profit: roundCurrency(codAmount - shippingCost),
+      };
     }
 
-    const totals = await calculateOrderScanTotals(req, liveShopifyOrder, shipment);
+    const totals = await calculateOrderScanTotals(
+      req,
+      liveShopifyOrder,
+      shipment,
+    );
     return {
       ...shipment,
       order_id:
@@ -1226,10 +1255,7 @@ const enrichShipmentWithOrderData = async ({
   };
 };
 
-const persistShipmentSnapshot = async ({
-  trackingNumber,
-  shipment = {},
-}) => {
+const persistShipmentSnapshot = async ({ trackingNumber, shipment = {} }) => {
   if (!trackingNumber) {
     return;
   }
@@ -1702,7 +1728,8 @@ router.get(
         let bostaPayloadForEnrichment = parsedStoredResponse;
 
         if (toNumber(refreshedShipment.expected_shipping_cost) <= 0) {
-          const derivedShippingCost = getBostaShippingCost(parsedStoredResponse);
+          const derivedShippingCost =
+            getBostaShippingCost(parsedStoredResponse);
           if (derivedShippingCost > 0) {
             refreshedShipment.expected_shipping_cost =
               roundCurrency(derivedShippingCost);
@@ -1755,13 +1782,15 @@ router.get(
         return res.json(enrichedShipment);
       }
 
-      resolvedBosta = resolvedBosta || (await resolveBostaServiceForRequest(req));
+      resolvedBosta =
+        resolvedBosta || (await resolveBostaServiceForRequest(req));
 
       // If not found in database, try Bosta's public tracking server first when
       // the business API is unavailable.
       if (!resolvedBosta?.service) {
         try {
-          const publicShipment = await fetchPublicTrackingShipment(trackingNumber);
+          const publicShipment =
+            await fetchPublicTrackingShipment(trackingNumber);
           return res.json(
             await enrichShipmentWithOrderData({
               req,
@@ -1810,7 +1839,10 @@ router.get(
           receiver: bostaDelivery.receiver || null,
           customer_name:
             bostaDelivery.receiver?.fullName ||
-            [bostaDelivery.receiver?.firstName, bostaDelivery.receiver?.lastName]
+            [
+              bostaDelivery.receiver?.firstName,
+              bostaDelivery.receiver?.lastName,
+            ]
               .filter(Boolean)
               .join(" ") ||
             null,
@@ -1831,7 +1863,8 @@ router.get(
         console.error("Failed to fetch from Bosta API:", bostaError);
 
         try {
-          const publicShipment = await fetchPublicTrackingShipment(trackingNumber);
+          const publicShipment =
+            await fetchPublicTrackingShipment(trackingNumber);
           return res.json(
             await enrichShipmentWithOrderData({
               req,
