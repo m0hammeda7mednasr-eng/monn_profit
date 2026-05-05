@@ -9,27 +9,22 @@ import {
 import { useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
-  CheckCircle,
-  Clock,
   Download,
   Edit2,
   Eye,
   Package,
-  Printer,
   RefreshCw,
   RotateCcw,
   Search,
-  TrendingUp,
 } from "lucide-react";
-import BarcodeLabelModal from "../components/BarcodeLabelModal";
+import ProductEditModal from "../components/ProductEditModal";
 import Sidebar from "../components/Sidebar";
 import { SkeletonBlock } from "../components/Common";
 import { useAuth } from "../context/AuthContext";
 import { useLocale } from "../context/LocaleContext";
-import { subscribeToSharedDataUpdates } from "../utils/realtime";
-import { shouldAutoRefreshView } from "../utils/refreshPolicy";
+import api from "../utils/api";
+import { buildCsvFilename, downloadCsvSections } from "../utils/csv";
 import {
-  PRODUCT_CACHE_FRESH_MS,
   buildProductsCacheKey,
   fetchProductPages,
   peekCachedProducts,
@@ -41,36 +36,17 @@ import {
   formatDateTime,
   formatNumber,
 } from "../utils/helpers";
-import { normalizeBarcodeVariantTitle } from "../utils/barcodeLabels";
-import {
-  buildCatalogCounts,
-  buildVariantRows,
-  toNumber,
-} from "../utils/productsView";
+import { buildVariantRows, toNumber } from "../utils/productsView";
 
 const INITIAL_FILTERS = {
   searchTerm: "",
   productType: "all",
-  stockStatus: "all",
-  minPrice: "",
-  maxPrice: "",
   sortBy: "updated_desc",
 };
-const SUPPORTED_STOCK_STATUS_FILTERS = new Set([
-  "all",
-  "in_stock",
-  "low_stock",
-  "out_of_stock",
-]);
 
 const resolveFiltersFromSearchParams = (searchParams) => {
   const nextFilters = { ...INITIAL_FILTERS };
-  const stockStatus = String(searchParams.get("stockStatus") || "").trim();
   const searchTerm = String(searchParams.get("q") || "").trim();
-
-  if (SUPPORTED_STOCK_STATUS_FILTERS.has(stockStatus)) {
-    nextFilters.stockStatus = stockStatus;
-  }
 
   if (searchTerm) {
     nextFilters.searchTerm = searchTerm;
@@ -83,16 +59,6 @@ const buildSearchParamsFromFilters = (filters, currentSearchParams) => {
   const nextSearchParams = new URLSearchParams(currentSearchParams);
   const normalizedSearchTerm = String(filters.searchTerm || "").trim();
 
-  if (
-    filters.stockStatus &&
-    filters.stockStatus !== "all" &&
-    SUPPORTED_STOCK_STATUS_FILTERS.has(filters.stockStatus)
-  ) {
-    nextSearchParams.set("stockStatus", filters.stockStatus);
-  } else {
-    nextSearchParams.delete("stockStatus");
-  }
-
   if (normalizedSearchTerm) {
     nextSearchParams.set("q", normalizedSearchTerm);
   } else {
@@ -102,20 +68,136 @@ const buildSearchParamsFromFilters = (filters, currentSearchParams) => {
   return nextSearchParams;
 };
 
-const PRODUCT_FILTER_LABELS = {
-  stockStatus: {
-    in_stock: "In stock",
-    low_stock: "Low stock",
-    out_of_stock: "Out of stock",
-  },
-};
-const isProductsRelatedSharedUpdate = (event) => {
-  const source = String(event?.source || "").toLowerCase();
-  if (!source) {
-    return true;
+const QUICK_COST_FIELDS = [
+  "cost_price",
+  "ads_cost",
+  "operation_cost",
+  "shipping_cost",
+];
+
+const formatExportAmount = (value, { allowBlank = false } = {}) => {
+  if (
+    allowBlank &&
+    (value === null || value === undefined || String(value).trim() === "")
+  ) {
+    return "";
   }
 
-  return source.includes("/shopify/products") || source.includes("/products/");
+  return toNumber(value).toFixed(2);
+};
+
+const applyQuickCostEditsToProducts = (
+  products,
+  productId,
+  updates,
+  updatedAt = new Date().toISOString(),
+) =>
+  (Array.isArray(products) ? products : []).map((product) => {
+    if (String(product?.id || "") !== String(productId || "")) {
+      return product;
+    }
+
+    const nextCostFields = QUICK_COST_FIELDS.reduce((accumulator, field) => {
+      if (Object.prototype.hasOwnProperty.call(updates || {}, field)) {
+        accumulator[field] = toNumber(updates?.[field]);
+      }
+
+      return accumulator;
+    }, {});
+
+    return {
+      ...product,
+      ...nextCostFields,
+      local_updated_at: updatedAt,
+      updated_at: updatedAt,
+      variants: Array.isArray(product?.variants)
+        ? product.variants.map((variant) => ({
+            ...variant,
+            ...nextCostFields,
+            updated_at: updatedAt,
+          }))
+        : product?.variants,
+    };
+  });
+
+const buildProductsExportSections = ({
+  variantRows,
+  summary,
+  select,
+}) => {
+  const rows = Array.isArray(variantRows) ? variantRows : [];
+
+  return [
+    {
+      title: select("بيانات التصدير", "Export metadata"),
+      headers: [select("البند", "Field"), select("القيمة", "Value")],
+      rows: [
+        [select("وقت التصدير", "Exported at"), new Date().toISOString()],
+        [
+          select("عدد المنتجات", "Products"),
+          formatNumber(summary?.uniqueProducts || 0, {
+            maximumFractionDigits: 0,
+          }),
+        ],
+        [
+          select("عدد الفاريانتات", "Variants"),
+          formatNumber(summary?.totalVariants || 0, {
+            maximumFractionDigits: 0,
+          }),
+        ],
+      ],
+    },
+    {
+      title: select("نسخة احتياطية للمنتجات", "Products backup"),
+      headers: [
+        "Product ID",
+        "Variant ID",
+        "Product Title",
+        "Variant Title",
+        "SKU",
+        "Barcode",
+        "Price",
+        "Cost Price",
+        "Ads Cost",
+        "Operation Cost",
+        "Shipping Cost",
+        "Total Unit Cost",
+        "Unit Profit",
+        "Shopify Inventory",
+        "Vendor",
+        "Product Type",
+        "Updated At",
+      ],
+      rows: rows.map((variant) => {
+        const totalUnitCost =
+          toNumber(variant?.cost_price) +
+          toNumber(variant?.ads_cost) +
+          toNumber(variant?.operation_cost) +
+          toNumber(variant?.shipping_cost);
+        const unitProfit = toNumber(variant?.price) - totalUnitCost;
+
+        return [
+          String(variant?.id || ""),
+          String(variant?.variant_id || ""),
+          String(variant?.product_title || ""),
+          String(variant?.variant_title || ""),
+          String(variant?.sku || ""),
+          String(variant?.barcode || ""),
+          formatExportAmount(variant?.price),
+          formatExportAmount(variant?.cost_price, { allowBlank: true }),
+          formatExportAmount(variant?.ads_cost),
+          formatExportAmount(variant?.operation_cost),
+          formatExportAmount(variant?.shipping_cost),
+          formatExportAmount(totalUnitCost),
+          formatExportAmount(unitProfit),
+          String(toNumber(variant?.shopify_inventory_quantity)),
+          String(variant?.vendor || ""),
+          String(variant?.product_type || ""),
+          String(variant?.updated_at || variant?._meta?.updatedAt || ""),
+        ];
+      }),
+    },
+  ];
 };
 
 export default function Products() {
@@ -123,8 +205,7 @@ export default function Products() {
   const { isAdmin, hasPermission } = useAuth();
   const { select } = useLocale();
   const canEditProducts = hasPermission("can_edit_products");
-  const canPrintBarcodeLabels = hasPermission("can_print_barcode_labels");
-  const cacheKey = useMemo(() => buildProductsCacheKey(), []);
+  const cacheKey = useMemo(() => buildProductsCacheKey(null, "basic"), []);
   const initialCachedSnapshot = useMemo(() => {
     const rows = peekCachedProducts(cacheKey);
     return {
@@ -141,9 +222,7 @@ export default function Products() {
   const [notification, setNotification] = useState(null);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
-  const [barcodeModalTargets, setBarcodeModalTargets] = useState([]);
-  const [barcodeModalTargetKey, setBarcodeModalTargetKey] = useState("");
-  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [quickEditVariant, setQuickEditVariant] = useState(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(
     () => initialCachedSnapshot.updatedAt,
   );
@@ -224,6 +303,7 @@ export default function Products() {
           const rows = await fetchProductPages({
             sortBy: "updated_at",
             sortDir: "desc",
+            light: true,
             cacheRefresh: force,
             onPage: ({ rows: accumulatedRows, hasMore }) => {
               setProducts(accumulatedRows);
@@ -247,6 +327,7 @@ export default function Products() {
                 : "No products found",
           });
           await writeProductsCache(cacheKey, rows);
+          return rows;
         } catch (requestError) {
           console.error("Error fetching products:", requestError);
           if (!silent) {
@@ -263,6 +344,7 @@ export default function Products() {
               ? { active: false, message: current.message }
               : { active: false, message: "" },
           );
+          return productsRef.current;
         } finally {
           setLoading(false);
         }
@@ -282,72 +364,28 @@ export default function Products() {
   useEffect(() => {
     let active = true;
 
-    (async () => {
-      const {
-        rows: cachedRows,
-        isFresh,
-        updatedAt,
-      } = await readCachedProducts(cacheKey);
+    readCachedProducts(cacheKey).then(({ rows: cachedRows, updatedAt }) => {
       if (!active) {
         return;
       }
 
-      const hasCachedRows = cachedRows.length > 0;
-      if (hasCachedRows && productsRef.current.length === 0) {
-        setProducts(cachedRows);
+      if (cachedRows.length > 0) {
+        if (productsRef.current.length === 0) {
+          setProducts(cachedRows);
+        }
         setLastUpdatedAt(updatedAt || new Date());
-      }
-
-      if (hasCachedRows && isFresh) {
+        setLoadStatus({
+          active: false,
+          message: `Showing ${formatNumber(cachedRows.length, { maximumFractionDigits: 0 })} saved products`,
+        });
         return;
       }
 
-      if (!hasCachedRows || !isFresh) {
-        await fetchProducts({ silent: true });
-      }
-    })();
-
-    let unsubscribe = () => {};
-    let onFocus = null;
-    let interval = null;
-
-    if (shouldAutoRefreshView()) {
-      unsubscribe = subscribeToSharedDataUpdates((event) => {
-        if (!isProductsRelatedSharedUpdate(event)) {
-          return;
-        }
-
-        fetchProducts({ silent: true });
-      });
-
-      interval = setInterval(() => {
-        if (document.visibilityState !== "visible") {
-          return;
-        }
-
-        fetchProducts({ silent: true });
-      }, PRODUCT_CACHE_FRESH_MS);
-
-      onFocus = async () => {
-        const { isFresh } = await readCachedProducts(cacheKey);
-        if (isFresh) {
-          return;
-        }
-
-        fetchProducts({ silent: true });
-      };
-      window.addEventListener("focus", onFocus);
-    }
+      fetchProducts({ silent: true });
+    });
 
     return () => {
       active = false;
-      if (interval) {
-        clearInterval(interval);
-      }
-      unsubscribe();
-      if (onFocus) {
-        window.removeEventListener("focus", onFocus);
-      }
     };
   }, [cacheKey, fetchProducts]);
 
@@ -398,22 +436,6 @@ export default function Products() {
       );
     }
 
-    if (filters.stockStatus !== "all") {
-      result = result.filter(
-        (variant) => variant._meta.stockState === filters.stockStatus,
-      );
-    }
-
-    if (filters.minPrice) {
-      const minPrice = toNumber(filters.minPrice);
-      result = result.filter((variant) => toNumber(variant.price) >= minPrice);
-    }
-
-    if (filters.maxPrice) {
-      const maxPrice = toNumber(filters.maxPrice);
-      result = result.filter((variant) => toNumber(variant.price) <= maxPrice);
-    }
-
     result.sort((a, b) => {
       switch (filters.sortBy) {
         case "title_asc":
@@ -457,60 +479,6 @@ export default function Products() {
     variantRows,
   ]);
 
-  const summary = useMemo(() => {
-    const lowStock = filteredVariants.filter(
-      (variant) => variant._meta.stockState === "low_stock",
-    ).length;
-    const totalInventory = filteredVariants.reduce(
-      (sum, variant) => sum + toNumber(variant.inventory_quantity),
-      0,
-    );
-    const uniqueProducts = new Set(
-      filteredVariants.map((variant) => String(variant.id || "")),
-    ).size;
-
-    return {
-      totalVariants: filteredVariants.length,
-      uniqueProducts,
-      lowStock,
-      totalInventory,
-    };
-  }, [filteredVariants]);
-
-  const catalogCounts = useMemo(() => {
-    return buildCatalogCounts(variantRows, filteredVariants);
-  }, [filteredVariants, variantRows]);
-
-  const hasLowStockAlert =
-    summary.lowStock > 0 && filters.stockStatus !== "low_stock";
-
-  const activeFilterChips = useMemo(() => {
-    const chips = [];
-
-    if (filters.searchTerm.trim()) {
-      chips.push(`Search: ${filters.searchTerm.trim()}`);
-    }
-    if (filters.productType !== "all") {
-      chips.push(`Type: ${filters.productType}`);
-    }
-    if (filters.stockStatus !== "all") {
-      chips.push(
-        `Shopify Stock: ${
-          PRODUCT_FILTER_LABELS.stockStatus[filters.stockStatus] ||
-          filters.stockStatus
-        }`,
-      );
-    }
-    if (filters.minPrice) {
-      chips.push(`Price >= ${filters.minPrice}`);
-    }
-    if (filters.maxPrice) {
-      chips.push(`Price <= ${filters.maxPrice}`);
-    }
-
-    return chips;
-  }, [filters]);
-
   const handleFilterChange = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
@@ -519,67 +487,45 @@ export default function Products() {
     setFilters(INITIAL_FILTERS);
   };
 
-  const getSyncStatusIcon = (variant) => {
-    if (variant.pending_sync) {
-      return (
-        <Clock size={16} className="text-yellow-500" title="Pending sync" />
-      );
-    }
-    if (variant.sync_error) {
-      return (
-        <AlertCircle
-          size={16}
-          className="text-red-500"
-          title={variant.sync_error}
-        />
-      );
-    }
-    if (variant.last_synced_at) {
-      return (
-        <CheckCircle size={16} className="text-green-500" title="Synced" />
-      );
-    }
-    return null;
-  };
-
   const handleExportProducts = useCallback(async () => {
     setExporting(true);
     try {
-      const response = await fetch("/api/products/export", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
+      let exportSourceProducts = productsRef.current;
 
-      if (!response.ok) {
-        throw new Error("Export failed");
+      if (fetchPromiseRef.current) {
+        await fetchPromiseRef.current;
+        exportSourceProducts = productsRef.current;
+      } else if (exportSourceProducts.length === 0) {
+        exportSourceProducts = await fetchProducts({ silent: true, force: true });
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `products-export-${new Date().toISOString().split("T")[0]}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      const exportVariants = buildVariantRows(exportSourceProducts, isAdmin);
+      if (exportVariants.length === 0) {
+        throw new Error("No products available to export");
+      }
 
-      showNotification(
-        select("تم تصدير المنتجات بنجاح", "Products exported successfully"),
-        "success",
-      );
+      downloadCsvSections({
+        filename: buildCsvFilename("products-backup"),
+        sections: buildProductsExportSections({
+          variantRows: exportVariants,
+          summary: {
+            uniqueProducts: new Set(
+              exportVariants.map((variant) => String(variant?.id || "")),
+            ).size,
+            totalVariants: exportVariants.length,
+          },
+          select,
+        }),
+      });
+
+      showNotification("Products CSV backup is ready", "success");
     } catch (error) {
       console.error("Export error:", error);
-      showNotification(
-        select("فشل تصدير المنتجات", "Failed to export products"),
-        "error",
-      );
+      showNotification("Failed to prepare products CSV backup", "error");
     } finally {
       setExporting(false);
     }
-  }, [select, showNotification]);
+  }, [fetchProducts, isAdmin, select, showNotification]);
 
   const openProductWorkspace = useCallback((productId, mode = "view") => {
     if (!productId) {
@@ -597,44 +543,48 @@ export default function Products() {
     }
   }, []);
 
-  const openBarcodeLabelModal = useCallback(
-    (variant) => {
-      if (!canPrintBarcodeLabels) {
-        showNotification(
-          select(
-            "صلاحية طباعة الباركود غير مفعلة لهذا الحساب.",
-            "Barcode label printing is not enabled for this account.",
-          ),
-          "error",
-        );
-        return;
+
+  const openQuickEdit = useCallback((variant) => {
+    setQuickEditVariant(variant);
+  }, []);
+
+  const closeQuickEdit = useCallback(() => {
+    setQuickEditVariant(null);
+  }, []);
+
+  const handleQuickCostSave = useCallback(
+    async (payload) => {
+      const productId = quickEditVariant?.id;
+
+      if (!productId) {
+        throw new Error("Product not found");
       }
 
-      const target = {
-        key: String(variant?.key || variant?.variant_id || variant?.id || ""),
-        title: String(variant?.product_title || "").trim(),
-        subtitle: normalizeBarcodeVariantTitle(
-          variant?.variant_title,
-          variant?.product_title,
+      const response = await api.post(`/shopify/products/${productId}/update`, payload);
+      const nextUpdatedAt = new Date().toISOString();
+      const nextProducts = applyQuickCostEditsToProducts(
+        productsRef.current,
+        productId,
+        payload,
+        nextUpdatedAt,
+      );
+
+      productsRef.current = nextProducts;
+      setProducts(nextProducts);
+      setLastUpdatedAt(new Date(nextUpdatedAt));
+      await writeProductsCache(cacheKey, nextProducts);
+
+      showNotification(
+        select(
+          "تم حفظ حقول التكلفة من نفس الصفحة.",
+          "Cost fields were saved from the same page.",
         ),
-        sku: String(variant?.sku || "").trim(),
-        barcode: String(variant?.barcode || "").trim(),
-        vendor: String(variant?.vendor || "").trim(),
-      };
+        "success",
+      );
 
-      if (!target.key || (!target.sku && !target.barcode)) {
-        showNotification(
-          "This variant does not have a printable SKU or barcode",
-          "error",
-        );
-        return;
-      }
-
-      setBarcodeModalTargets([target]);
-      setBarcodeModalTargetKey(target.key);
-      setIsBarcodeModalOpen(true);
+      return response?.data;
     },
-    [canPrintBarcodeLabels, select, showNotification],
+    [cacheKey, quickEditVariant, select, showNotification],
   );
 
   return (
@@ -667,8 +617,8 @@ export default function Products() {
               </h1>
               <p className="text-slate-600">
                 {select(
-                  "\u062a\u0645 \u0641\u0635\u0644 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a \u0639\u0646 \u0627\u0644\u0641\u0627\u0631\u064a\u0627\u0646\u062a\u0627\u062a \u0628\u0634\u0643\u0644 \u0648\u0627\u0636\u062d \u0644\u062a\u0628\u0642\u0649 \u0627\u0644\u0641\u0644\u0627\u062a\u0631 \u0648\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a\u0627\u062a \u0633\u0647\u0644\u0629 \u0627\u0644\u0642\u0631\u0627\u0621\u0629.",
-                  "Products and variants are separated clearly so filters and totals stay easy to read.",
+                  "قائمة بسيطة للمنتجات ببحث سريع وتعديل تكلفة سريع بدون حمولة زائدة.",
+                  "A lighter products list with quick search and quick cost edit.",
                 )}
               </p>
               {lastUpdatedAt && (
@@ -689,8 +639,8 @@ export default function Products() {
               >
                 <Download size={18} />
                 {exporting
-                  ? select("جاري التصدير...", "Exporting...")
-                  : select("تصدير Excel", "Export Excel")}
+                  ? select("جاري تجهيز النسخة...", "Preparing backup...")
+                  : select("نسخة CSV", "Backup CSV")}
               </button>
               <button
                 onClick={() => fetchProducts({ force: true })}
@@ -713,104 +663,20 @@ export default function Products() {
             <div className="bg-sky-50 border border-sky-200 rounded-xl px-4 py-3 text-sm text-sky-800 flex items-center justify-between gap-3">
               <span>{loadStatus.message}</span>
               {loadStatus.active && (
-                <span className="text-xs text-sky-600">Updating...</span>
+                <span className="text-xs text-sky-600">Loading...</span>
               )}
             </div>
           )}
 
-          {hasLowStockAlert && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
-              <div className="flex min-w-0 items-start gap-3">
-                <div className="mt-0.5 rounded-full bg-amber-100 p-2 text-amber-700">
-                  <AlertCircle size={18} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">
-                    {formatNumber(summary.lowStock, {
-                      maximumFractionDigits: 0,
-                    })}{" "}
-                    {select(
-                      "\u0641\u0627\u0631\u064a\u0627\u0646\u062a\u0627\u062a \u0627\u0644\u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u0645\u0646\u062e\u0641\u0636 \u062a\u062d\u062a\u0627\u062c \u0645\u062a\u0627\u0628\u0639\u0629",
-                      "low-Shopify-stock variants need follow-up",
-                    )}
-                  </p>
-                  <p className="mt-1 text-xs text-amber-800/90">
-                    {select(
-                      "\u0631\u0643\u0632 \u0647\u0630\u0627 \u0627\u0644\u0639\u0631\u0636 \u0639\u0644\u0649 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a \u0627\u0644\u0623\u0642\u0644 \u0645\u0646 \u062d\u062f \u0627\u0644\u0645\u062e\u0632\u0648\u0646 \u0644\u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u062a\u0648\u0631\u064a\u062f \u0623\u0633\u0631\u0639.",
-                      "This alert is based on Shopify stock shown on this page, not warehouse balance.",
-                    )}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleFilterChange("stockStatus", "low_stock")}
-                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
-              >
-                {select(
-                  "\u0631\u0643\u0632 \u0639\u0644\u0649 \u0627\u0644\u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u0645\u0646\u062e\u0641\u0636",
-                  "Focus low stock",
-                )}
-              </button>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard
-              label={select(
-                "\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a",
-                "Products",
-              )}
-              value={formatNumber(summary.uniqueProducts, {
-                maximumFractionDigits: 0,
-              })}
-              icon={Package}
-              color="from-sky-500 to-sky-700"
-            />
-            <SummaryCard
-              label={select(
-                "\u0627\u0644\u0641\u0627\u0631\u064a\u0627\u0646\u062a\u0627\u062a",
-                "Variants",
-              )}
-              value={formatNumber(summary.totalVariants, {
-                maximumFractionDigits: 0,
-              })}
-              icon={Package}
-              color="from-indigo-500 to-indigo-700"
-            />
-            <SummaryCard
-              label={select(
-                "\u0625\u062c\u0645\u0627\u0644\u064a \u0645\u062e\u0632\u0648\u0646 Shopify",
-                "Total Shopify Stock",
-              )}
-              value={formatNumber(summary.totalInventory, {
-                maximumFractionDigits: 0,
-              })}
-              icon={TrendingUp}
-              color="from-emerald-500 to-emerald-700"
-            />
-            <SummaryCard
-              label={select(
-                "Shopify \u0645\u0646\u062e\u0641\u0636",
-                "Low Shopify Stock",
-              )}
-              value={formatNumber(summary.lowStock, {
-                maximumFractionDigits: 0,
-              })}
-              icon={AlertCircle}
-              color="from-amber-500 to-amber-700"
-            />
-          </div>
 
           <div className="bg-white rounded-xl shadow p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
-                  Product Filters
+                  Simple filters
                 </h2>
                 <p className="text-sm text-slate-500">
-                  The page now keeps only the most useful filters so browsing
-                  products stays quick and light.
+                  Search, type, and sort only.
                 </p>
               </div>
               <button
@@ -823,53 +689,17 @@ export default function Products() {
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                <span>
-                  Showing{" "}
-                  <strong>
-                    {formatNumber(catalogCounts.filteredProducts, {
-                      maximumFractionDigits: 0,
-                    })}
-                  </strong>{" "}
-                  products
-                </span>
-                <span>
-                  and{" "}
-                  <strong>
-                    {formatNumber(catalogCounts.filteredVariants, {
-                      maximumFractionDigits: 0,
-                    })}
-                  </strong>{" "}
-                  variants
-                </span>
-                <span className="text-slate-500">
-                  from{" "}
-                  {formatNumber(catalogCounts.totalProducts, {
-                    maximumFractionDigits: 0,
-                  })}{" "}
-                  total products /{" "}
-                  {formatNumber(catalogCounts.totalVariants, {
-                    maximumFractionDigits: 0,
-                  })}{" "}
-                  total variants
-                </span>
-              </div>
-              {activeFilterChips.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {activeFilterChips.map((chip) => (
-                    <span
-                      key={chip}
-                      className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 border border-slate-200"
-                    >
-                      {chip}
-                    </span>
-                  ))}
-                </div>
-              )}
+              Showing{" "}
+              <strong>
+                {formatNumber(filteredVariants.length, {
+                  maximumFractionDigits: 0,
+                })}
+              </strong>{" "}
+              items right now.
             </div>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-              <div className="xl:col-span-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-4">
+              <div className="md:col-span-2 xl:col-span-2">
                 <label className="block text-xs text-slate-500 mb-1">
                   Search
                 </label>
@@ -912,52 +742,6 @@ export default function Products() {
 
               <div>
                 <label className="block text-xs text-slate-500 mb-1">
-                  Shopify Stock
-                </label>
-                <select
-                  value={filters.stockStatus}
-                  onChange={(event) =>
-                    handleFilterChange("stockStatus", event.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                >
-                  <option value="all">All</option>
-                  <option value="in_stock">In stock</option>
-                  <option value="low_stock">Low stock</option>
-                  <option value="out_of_stock">Out of stock</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
-                  Price Min
-                </label>
-                <input
-                  type="number"
-                  value={filters.minPrice}
-                  onChange={(event) =>
-                    handleFilterChange("minPrice", event.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
-                  Price Max
-                </label>
-                <input
-                  type="number"
-                  value={filters.maxPrice}
-                  onChange={(event) =>
-                    handleFilterChange("maxPrice", event.target.value)
-                  }
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
                   Sort
                 </label>
                 <select
@@ -980,14 +764,14 @@ export default function Products() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {loadStatus.active && products.length === 0 ? (
               Array.from({ length: 8 }).map((_, index) => (
                 <div
                   key={`product-skeleton-${index}`}
                   className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow"
                 >
-                  <SkeletonBlock className="h-52 w-full" roundedClassName="" />
+                  <SkeletonBlock className="h-40 w-full" roundedClassName="" />
                   <div className="space-y-4 p-4">
                     <div className="space-y-2">
                       <SkeletonBlock className="h-3 w-16" />
@@ -1026,56 +810,29 @@ export default function Products() {
               filteredVariants.map((variant) => (
                 <div
                   key={variant.key}
-                  className="bg-white rounded-xl shadow hover:shadow-xl transition overflow-hidden border border-slate-100"
+                  className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
                 >
-                  <div className="relative h-52 bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200 flex items-center justify-center">
+                  <div className="h-40 bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200 flex items-center justify-center">
                     <VariantImage variant={variant} />
-                    {getSyncStatusIcon(variant) && (
-                      <div className="absolute top-3 left-3 bg-white/90 rounded-full p-2 shadow-sm">
-                        {getSyncStatusIcon(variant)}
-                      </div>
-                    )}
-                    <StockBadge
-                      stockState={variant._meta.actualStockState}
-                      shopifyInventoryQuantity={
-                        variant.shopify_inventory_quantity
-                      }
-                      warehouseInventoryQuantity={
-                        variant.warehouse_inventory_quantity
-                      }
-                    />
                   </div>
 
-                  <div className="p-4 space-y-4">
+                  <div className="space-y-3 p-4">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                        Product
-                      </p>
                       <h3 className="font-bold text-slate-900 line-clamp-2 min-h-[3rem]">
                         {variant.product_title}
                       </h3>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <span className="inline-flex items-center rounded-full bg-slate-900 px-2.5 py-1 text-xs font-medium text-white">
-                          {variant.variant_title}
-                        </span>
-                        {variant.has_multiple_variants && (
-                          <span className="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-700">
-                            {variant.variants_count} variants
-                          </span>
-                        )}
-                        {variant.product_type && (
-                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+                        <span>{variant.variant_title}</span>
+                        {variant.product_type ? (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
                             {variant.product_type}
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <DetailItem
-                        label="Price"
-                        value={formatAmount(variant.price)}
-                      />
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <DetailItem label="Price" value={formatAmount(variant.price)} />
                       {isAdmin ? (
                         <DetailItem
                           label="Cost"
@@ -1087,46 +844,16 @@ export default function Products() {
                           }
                         />
                       ) : null}
-                      <DetailItem
-                        label="Shopify"
-                        value={formatNumber(
-                          variant.shopify_inventory_quantity,
-                          {
-                            maximumFractionDigits: 0,
-                          },
-                        )}
-                        valueClassName={
-                          variant._meta.actualStockState === "in_stock"
-                            ? "text-emerald-600"
-                            : variant._meta.actualStockState === "low_stock"
-                              ? "text-amber-600"
-                              : "text-rose-600"
-                        }
-                      />
-                      <DetailItem
-                        label="Warehouse"
-                        value={formatNumber(
-                          variant.warehouse_inventory_quantity,
-                          {
-                            maximumFractionDigits: 0,
-                          },
-                        )}
-                        valueClassName={
-                          toNumber(variant.warehouse_inventory_quantity) > 0
-                            ? "text-emerald-600"
-                            : "text-slate-500"
-                        }
-                      />
                       <DetailItem label="SKU" value={variant.sku || "-"} />
+                      <DetailItem
+                        label="Updated"
+                        value={
+                          variant._meta.updatedAt
+                            ? formatDateTime(variant._meta.updatedAt)
+                            : "-"
+                        }
+                      />
                     </div>
-
-                    {toNumber(variant.shopify_inventory_quantity) !==
-                    toNumber(variant.warehouse_inventory_quantity) ? (
-                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                        Shopify stock and warehouse stock are different for this
-                        variant.
-                      </div>
-                    ) : null}
 
                     {variant.option_values.length > 0 && (
                       <div className="flex flex-wrap gap-2">
@@ -1141,21 +868,10 @@ export default function Products() {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      {canPrintBarcodeLabels ? (
-                        <button
-                          onClick={() => openBarcodeLabelModal(variant)}
-                          className="app-button-secondary flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700"
-                        >
-                          <Printer size={14} />
-                          Label
-                        </button>
-                      ) : (
-                        <div />
-                      )}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <button
                         onClick={() => openProductWorkspace(variant.id)}
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg flex items-center justify-center gap-2 text-sm"
+                        className="flex-1 rounded-lg border border-slate-200 bg-white py-2 text-sm text-slate-700 flex items-center justify-center gap-2 hover:bg-slate-50"
                       >
                         <Eye size={14} />
                         View
@@ -1163,12 +879,16 @@ export default function Products() {
                       {canEditProducts && (
                         <button
                           onClick={() =>
-                            openProductWorkspace(variant.id, "edit")
+                            isAdmin
+                              ? openQuickEdit(variant)
+                              : openProductWorkspace(variant.id, "edit")
                           }
                           className="flex-1 bg-sky-600 hover:bg-sky-700 text-white py-2 rounded-lg flex items-center justify-center gap-2 text-sm"
                         >
                           <Edit2 size={14} />
-                          {select("\u062a\u0639\u062f\u064a\u0644", "Edit")}
+                          {isAdmin
+                            ? select("تعديل التكلفة", "Quick cost")
+                            : select("تعديل", "Edit")}
                         </button>
                       )}
                     </div>
@@ -1188,29 +908,18 @@ export default function Products() {
         </div>
       </main>
 
-      <BarcodeLabelModal
-        open={isBarcodeModalOpen}
-        onClose={() => setIsBarcodeModalOpen(false)}
-        targets={barcodeModalTargets}
-        defaultTargetKey={barcodeModalTargetKey}
-      />
+      {quickEditVariant && isAdmin ? (
+        <ProductEditModal
+          product={quickEditVariant}
+          canEditCost={isAdmin}
+          onClose={closeQuickEdit}
+          onSave={handleQuickCostSave}
+        />
+      ) : null}
     </div>
   );
 }
 
-function SummaryCard({ label, value, icon: Icon, color }) {
-  return (
-    <div className={`bg-gradient-to-r ${color} rounded-xl text-white p-4`}>
-      <div className="flex justify-between items-center">
-        <div>
-          <p className="text-sm text-white/90">{label}</p>
-          <p className="text-2xl font-bold mt-1">{value}</p>
-        </div>
-        <Icon size={24} />
-      </div>
-    </div>
-  );
-}
 
 function DetailItem({ label, value, valueClassName = "" }) {
   return (
@@ -1245,42 +954,3 @@ function VariantImage({ variant }) {
   );
 }
 
-function StockBadge({
-  stockState,
-  shopifyInventoryQuantity = 0,
-  warehouseInventoryQuantity = 0,
-}) {
-  const hasWarehouseStockOnly =
-    toNumber(shopifyInventoryQuantity) <= 0 &&
-    toNumber(warehouseInventoryQuantity) > 0;
-
-  if (hasWarehouseStockOnly) {
-    return (
-      <span className="absolute top-3 right-3 bg-amber-600 text-white text-xs px-2.5 py-1 rounded-full shadow">
-        Shopify OOS
-      </span>
-    );
-  }
-
-  if (stockState === "out_of_stock") {
-    return (
-      <span className="absolute top-3 right-3 bg-red-600 text-white text-xs px-2.5 py-1 rounded-full shadow">
-        Out of stock
-      </span>
-    );
-  }
-
-  if (stockState === "low_stock") {
-    return (
-      <span className="absolute top-3 right-3 bg-amber-500 text-white text-xs px-2.5 py-1 rounded-full shadow">
-        Low stock
-      </span>
-    );
-  }
-
-  return (
-    <span className="absolute top-3 right-3 bg-emerald-600 text-white text-xs px-2.5 py-1 rounded-full shadow">
-      In stock
-    </span>
-  );
-}

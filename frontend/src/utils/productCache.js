@@ -14,8 +14,16 @@ export const PRODUCT_CACHE_FRESH_MS = HEAVY_VIEW_CACHE_FRESH_MS;
 export const PRODUCT_CACHE_PAGE_SIZE = 200;
 export const PRODUCT_CACHE_REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
 
-export const buildProductsCacheKey = (storeIdOverride = null) =>
-  buildStoreScopedCacheKey(PRODUCT_CACHE_SCOPE, storeIdOverride);
+export const buildProductsCacheKey = (
+  storeIdOverride = null,
+  viewMode = "full",
+) =>
+  buildStoreScopedCacheKey(
+    viewMode === "full"
+      ? PRODUCT_CACHE_SCOPE
+      : `${PRODUCT_CACHE_SCOPE}:${viewMode}`,
+    storeIdOverride,
+  );
 
 export const extractCachedProducts = (cachedEntry) => {
   const value = cachedEntry?.value || {};
@@ -57,6 +65,7 @@ export const fetchProductPages = async ({
   sortDir = "desc",
   timeoutMs = PRODUCT_CACHE_REQUEST_TIMEOUT_MS,
   cacheRefresh = false,
+  light = false,
   onPage = null,
 } = {}) =>
   fetchAllPagesProgressively(
@@ -67,6 +76,7 @@ export const fetchProductPages = async ({
           offset,
           sort_by: sortBy,
           sort_dir: sortDir,
+          ...(light ? { view: "basic" } : {}),
           ...(cacheRefresh ? { cache_refresh: "1" } : {}),
         },
         timeout: timeoutMs,

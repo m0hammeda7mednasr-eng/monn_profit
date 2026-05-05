@@ -65,6 +65,14 @@ const isDeliveredState = (code, stateName) =>
   Number(code) === 45 ||
   String(stateName || "").toUpperCase() === "DELIVERED";
 
+const normalizeDisplayText = (value) => String(value || "").trim();
+
+const getReceiverFullName = (receiver = {}) =>
+  normalizeDisplayText(
+    receiver?.fullName ||
+      [receiver?.firstName, receiver?.lastName].filter(Boolean).join(" "),
+  );
+
 const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -308,6 +316,15 @@ const formatPublicTrackingShipment = (publicTracking, trackingNumber) => {
     : [];
   const currentCode = Number(currentStatus.code || 0);
   const currentState = currentStatus.state;
+  const businessReference = normalizeDisplayText(
+    publicTracking?.BusinessReference ||
+      publicTracking?.businessReference ||
+      publicTracking?.shopifyOrderId,
+  );
+  const customerName = getReceiverFullName(
+    publicTracking?.receiver || publicTracking?.Receiver,
+  );
+  const codAmount = Number(publicTracking?.cod || 0);
 
   return {
     tracking_number: publicTracking?.TrackingNumber || trackingNumber,
@@ -317,8 +334,22 @@ const formatPublicTrackingShipment = (publicTracking, trackingNumber) => {
     delivery_state: currentCode,
     delivery_state_label: getStateLabel(currentCode, currentState),
     expected_shipping_cost: 0,
-    cod_amount: Number(publicTracking?.cod || 0),
+    shipping_cost: 0,
+    cod_amount: codAmount,
+    order_total: codAmount,
+    product_cost: 0,
+    revenue: codAmount,
+    total_cost: 0,
+    net_profit: codAmount,
+    real_net_profit: codAmount,
     is_delivered: isDeliveredState(currentCode, currentState),
+    business_reference: businessReference || null,
+    customer_name: customerName || null,
+    order_name: businessReference || publicTracking?.TrackingNumber || trackingNumber,
+    has_order_match: false,
+    scan_data_source: "vercel_public_bosta_fallback",
+    scan_resolution_message:
+      "Backend data is unavailable, so this result is based on Bosta tracking only.",
     created_at: transitEvents[0]?.timestamp || null,
     updated_at: currentStatus.timestamp || null,
     last_status_update: currentStatus.timestamp || null,
@@ -401,6 +432,62 @@ const fetchBostaTrackingDetailsSafely = async (trackingNumber, apiKey) => {
   }
 };
 
+const fetchBostaBusinessDelivery = async ({
+  trackingNumber,
+  apiKey,
+  baseUrl,
+  extraHeaders = {},
+}) => {
+  const response = await fetch(
+    `${baseUrl.replace(/\/+$/, "")}/deliveries/${encodeURIComponent(trackingNumber)}`,
+    {
+      headers: {
+        Authorization: apiKey,
+        "Content-Type": "application/json",
+        ...extraHeaders,
+      },
+    },
+  );
+  const text = await response.text();
+  let data = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(
+      `Bosta business API returned a non-JSON response (${response.status})`,
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message || data?.error || `Bosta business API returned ${response.status}`,
+    );
+  }
+
+  return data;
+};
+
+const fetchBostaBusinessDeliveryWithFallback = async (trackingNumber, apiKey) => {
+  try {
+    return await fetchBostaBusinessDelivery({
+      trackingNumber,
+      apiKey,
+      baseUrl: "https://app.bosta.co/api/v2",
+    });
+  } catch (primaryError) {
+    console.warn("Bosta v2 delivery lookup failed:", primaryError.message);
+    return await fetchBostaBusinessDelivery({
+      trackingNumber,
+      apiKey,
+      baseUrl: "https://app.bosta.co/api/v0",
+      extraHeaders: {
+        "X-Requested-By": "nodejs-sdk",
+      },
+    });
+  }
+};
+
 const mergeBostaDeliveryPayloads = (delivery, tracking) => {
   if (!tracking || typeof tracking !== "object") {
     return delivery;
@@ -464,52 +551,10 @@ export default async function handler(req, res) {
   try {
     console.log(`Fetching shipment ${trackingNumber} from Bosta API`);
 
-    // Call Bosta API
-    const bostaResponse = await fetch(
-      `https://app.bosta.co/api/v2/deliveries/${trackingNumber}`,
-      {
-        headers: {
-          Authorization: bostaApiKey,
-          "Content-Type": "application/json",
-        },
-      },
+    const bostaData = await fetchBostaBusinessDeliveryWithFallback(
+      trackingNumber,
+      bostaApiKey,
     );
-
-    if (!bostaResponse.ok) {
-      console.error(`Bosta API returned ${bostaResponse.status}`);
-
-      try {
-        const publicShipment = await fetchPublicTrackingShipment(trackingNumber);
-        return res.status(200).json(publicShipment);
-      } catch (publicError) {
-        console.error("Bosta public tracking fallback failed:", publicError);
-      }
-
-      if (bostaResponse.status === 404) {
-        return res.status(404).json({
-          error: "Tracking number not found in Bosta",
-          tracking_number: trackingNumber,
-        });
-      }
-
-      const errorText = await bostaResponse.text();
-      console.error("Bosta API error:", errorText);
-
-      return res.status(bostaResponse.status).json({
-        error: "Failed to fetch from Bosta API",
-        status: bostaResponse.status,
-        details: errorText,
-      });
-    }
-
-    const responseText = await bostaResponse.text();
-    let bostaData = null;
-    try {
-      bostaData = responseText ? JSON.parse(responseText) : null;
-    } catch {
-      throw new Error("Bosta business API returned a non-JSON response");
-    }
-
     console.log("Successfully fetched from Bosta API");
     const bostaTrackingData = await fetchBostaTrackingDetailsSafely(
       trackingNumber,
@@ -519,6 +564,19 @@ export default async function handler(req, res) {
       bostaData,
       bostaTrackingData,
     );
+    const deliveryStateCode = Number(
+      bostaData?.state?.code || bostaData?.state?.value || 0,
+    );
+    const deliveryStateName =
+      bostaData?.state?.value || bostaData?.state?.label || "";
+    const businessReference = normalizeDisplayText(
+      bostaData?.businessReference ||
+        bostaData?.BusinessReference ||
+        bostaData?.shopifyOrderId,
+    );
+    const customerName = getReceiverFullName(bostaData?.receiver);
+    const shippingCost = getBostaShippingCost(mergedBostaData);
+    const codAmount = Number(bostaData?.cod || 0);
 
     // Format response to match our schema
     const shipment = {
@@ -526,11 +584,29 @@ export default async function handler(req, res) {
       delivery_id: bostaData._id,
       order_id: null,
       bosta_order_type: bostaData.type,
-      delivery_state: bostaData.state?.value || 0,
-      delivery_state_label: bostaData.state?.label || "Unknown",
-      expected_shipping_cost: getBostaShippingCost(mergedBostaData),
-      cod_amount: bostaData.cod || 0,
-      is_delivered: bostaData.state?.value === 40,
+      delivery_state: deliveryStateCode,
+      delivery_state_label: getStateLabel(
+        deliveryStateCode,
+        deliveryStateName,
+      ),
+      expected_shipping_cost: shippingCost,
+      shipping_cost: shippingCost,
+      cod_amount: codAmount,
+      order_total: codAmount,
+      product_cost: 0,
+      revenue: codAmount,
+      total_cost: 0,
+      net_profit: codAmount,
+      real_net_profit: Number((codAmount - shippingCost).toFixed(2)),
+      is_delivered: isDeliveredState(deliveryStateCode, deliveryStateName),
+      business_reference: businessReference || null,
+      customer_name: customerName || null,
+      order_name:
+        businessReference || bostaData.trackingNumber || trackingNumber,
+      has_order_match: false,
+      scan_data_source: "vercel_bosta_fallback",
+      scan_resolution_message:
+        "Backend data is unavailable, so this result is based on Bosta shipment data only.",
       created_at: bostaData.createdAt,
       updated_at: bostaData.updatedAt,
       receiver: bostaData.receiver,

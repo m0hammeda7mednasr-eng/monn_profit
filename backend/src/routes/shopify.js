@@ -2523,6 +2523,58 @@ const buildProductVariantSummaries = (product) => {
   });
 };
 
+const buildBasicProductVariantSummaries = (product) => {
+  const variants = getProductVariantRows(product);
+  const imageRows = getProductImageRows(product);
+  const primaryImageUrl = getProductPrimaryImageUrl(product);
+
+  if (variants.length === 0) {
+    return [
+      {
+        id: product?.shopify_id || product?.id || null,
+        product_id: product?.shopify_id || product?.id || null,
+        title: product?.title || "Default",
+        price: product?.price ?? 0,
+        cost: product?.cost_price ?? 0,
+        cost_price: product?.cost_price ?? 0,
+        sku: getProductPrimarySku(product),
+        position: 1,
+        option1: null,
+        option2: null,
+        option3: null,
+        barcode: null,
+        image_url: primaryImageUrl,
+        inventory_quantity: toNumber(product?.inventory_quantity),
+        shopify_inventory_quantity: toNumber(product?.inventory_quantity),
+        created_at: product?.created_at || null,
+        updated_at: product?.updated_at || null,
+      },
+    ];
+  }
+
+  return variants.map((variant, index) => ({
+    id: variant?.id || null,
+    product_id:
+      variant?.product_id || product?.shopify_id || product?.id || null,
+    title: variant?.title || `Variant ${index + 1}`,
+    price: variant?.price ?? product?.price ?? 0,
+    cost: variant?.cost ?? variant?.cost_price ?? product?.cost_price ?? 0,
+    cost_price:
+      variant?.cost_price ?? variant?.cost ?? product?.cost_price ?? 0,
+    sku: String(variant?.sku || "").trim(),
+    position: variant?.position ?? index + 1,
+    option1: variant?.option1 ?? null,
+    option2: variant?.option2 ?? null,
+    option3: variant?.option3 ?? null,
+    barcode: variant?.barcode ?? null,
+    image_url: resolveVariantImageUrl(variant, imageRows, primaryImageUrl),
+    inventory_quantity: toNumber(variant?.inventory_quantity),
+    shopify_inventory_quantity: toNumber(variant?.inventory_quantity),
+    created_at: variant?.created_at || null,
+    updated_at: variant?.updated_at || null,
+  }));
+};
+
 const buildProductSummary = (product) => {
   const variants = buildProductVariantSummaries(product);
   const images = getProductImageRows(product);
@@ -2554,6 +2606,37 @@ const buildProductSummary = (product) => {
 const buildProductListItem = (product, isAdmin) => {
   const { data, ...summary } = buildProductSummary(product);
   return sanitizeProductForRole(summary, isAdmin);
+};
+
+const buildBasicProductSummary = (product) => {
+  const variants = buildBasicProductVariantSummaries(product);
+  const totalInventory = getProductTotalInventory(product);
+  const primaryImageUrl = getProductPrimaryImageUrl(product);
+
+  return {
+    ...product,
+    inventory_quantity: totalInventory,
+    shopify_inventory_quantity: totalInventory,
+    total_inventory: totalInventory,
+    total_shopify_inventory: totalInventory,
+    sku: getProductPrimarySku(product),
+    image_url: primaryImageUrl,
+    variants,
+    variants_count: variants.length,
+    has_multiple_variants: variants.length > 1,
+  };
+};
+
+const buildBasicProductListItem = (product, isAdmin) => {
+  const { data, ...summary } = buildBasicProductSummary(product);
+  return sanitizeProductForRole(summary, isAdmin);
+};
+
+const isBasicProductsListRequest = (query = {}) => {
+  const view = String(query?.view || query?.mode || "")
+    .trim()
+    .toLowerCase();
+  return view === "basic" || String(query?.light || "").trim() === "1";
 };
 
 const MOON_PROFIT_PAYMENT_TAG_PREFIXES = ["moon_profit_payment_method:", "moon_profit_pm:"];
@@ -5148,6 +5231,7 @@ router.get(
   requirePermission("can_view_products"),
   async (req, res) => {
     try {
+      const isBasicView = isBasicProductsListRequest(req.query);
       const pagination = getListPagination(req.query);
       const sortOptions = getListSortOptions(
         req.query,
@@ -5182,12 +5266,17 @@ router.get(
       console.log(
         `Returning ${data?.length || 0} products for user ${req.user.id}`,
       );
-      const productsWithSupplierLinks = await attachSupplierLinksToProducts(
-        data || [],
+      const sourceProducts = isBasicView
+        ? data || []
+        : await attachSupplierLinksToProducts(data || []);
+      const sanitizedProducts = sourceProducts.map((product) =>
+        isBasicView
+          ? buildBasicProductListItem(product, isAdmin)
+          : buildProductListItem(product, isAdmin),
       );
-      const sanitizedProducts = productsWithSupplierLinks.map((product) =>
-        buildProductListItem(product, isAdmin),
-      );
+      if (isBasicView) {
+        res.setHeader("X-Moon-Profit-Products-View", "basic");
+      }
       res.json(buildPaginatedCollection(sanitizedProducts, pagination));
     } catch (e) {
       console.error("Exception fetching products:", e);

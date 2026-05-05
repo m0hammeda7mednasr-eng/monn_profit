@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { getSupabaseConfigErrorMessage } from "../supabaseClient.js";
 import { getUserRole, normalizeRole } from "./permissions.js";
 import { getJwtSecret } from "../helpers/jwt.js";
 import { isTransientSupabaseError } from "../helpers/supabaseRetry.js";
@@ -116,9 +117,10 @@ export const authenticateToken = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Authentication middleware error:", error);
+    const localConfigError = getSupabaseConfigErrorMessage();
     return res.status(isTransientSupabaseError(error) ? 503 : 500).json({
       error: isTransientSupabaseError(error)
-        ? "Authentication service is temporarily unavailable"
+        ? localConfigError || "Authentication service is temporarily unavailable"
         : "Authentication failed",
     });
   }

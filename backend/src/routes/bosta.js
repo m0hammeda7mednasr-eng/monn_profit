@@ -15,6 +15,7 @@ import {
   isDemoTrackingNumber,
   normalizeTrackingNumber,
 } from "../helpers/bostaTracking.js";
+import { getLineItemBookedAmount } from "../helpers/orderAnalytics.js";
 
 const router = express.Router();
 
@@ -122,6 +123,75 @@ const UUID_REGEX =
 const isUuid = (value) => UUID_REGEX.test(String(value || "").trim());
 
 const normalizeSecret = (value) => String(value || "").trim();
+const normalizeDisplayText = (value) => String(value || "").trim();
+const SHOP_DOMAIN_REGEX = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
+
+const normalizeShopDomain = (value) => {
+  let raw = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!raw) {
+    return "";
+  }
+
+  raw = raw.replace(/^https?:\/\//, "");
+  if (raw.startsWith("admin.shopify.com/store/")) {
+    const parts = raw.split("/");
+    const storeSlug = String(parts[2] || "")
+      .trim()
+      .toLowerCase();
+    if (storeSlug) {
+      return `${storeSlug}.myshopify.com`;
+    }
+  }
+
+  raw = raw.split(/[/?#]/)[0];
+  if (raw.endsWith(".myshopify.com")) {
+    return raw;
+  }
+
+  const normalizedSlug = raw.replace(/[^a-z0-9-]/g, "");
+  if (!normalizedSlug) {
+    return "";
+  }
+
+  return `${normalizedSlug}.myshopify.com`;
+};
+
+const getEmergencyShopifyToken = ({ userId, requestedStoreId } = {}) => {
+  const accessToken = normalizeSecret(
+    process.env.SHOPIFY_EMERGENCY_ACCESS_TOKEN ||
+      process.env.SHOPIFY_ACCESS_TOKEN,
+  );
+  const shop = normalizeShopDomain(
+    process.env.SHOPIFY_EMERGENCY_SHOP || process.env.SHOPIFY_SHOP,
+  );
+
+  if (!accessToken || !shop || !SHOP_DOMAIN_REGEX.test(shop)) {
+    return null;
+  }
+
+  return {
+    user_id: process.env.SHOPIFY_EMERGENCY_USER_ID || userId || null,
+    store_id:
+      requestedStoreId || process.env.SHOPIFY_EMERGENCY_STORE_ID || null,
+    shop,
+    access_token: accessToken,
+    source: "env_emergency",
+  };
+};
+
+const getAccessibleStoreIdsSafely = async (
+  userId,
+  context = "Bosta route",
+) => {
+  try {
+    return await getAccessibleStoreIds(userId);
+  } catch (error) {
+    console.warn(`${context} accessible store lookup failed:`, error.message);
+    return [];
+  }
+};
 
 const getTrackingValidationResponse = (value, options) => {
   const trackingNumber = normalizeTrackingNumber(value);
@@ -198,12 +268,16 @@ const getRequestedStoreId = (req) => {
 
 const resolveStoreScope = async (req) => {
   const requestedStoreId = getRequestedStoreId(req);
+  const isAdmin = Boolean(req.user?.role === "admin" || req.user?.isAdmin);
   if (requestedStoreId) {
-    if (req.user?.role === "admin" || req.user?.isAdmin) {
+    if (isAdmin) {
       return requestedStoreId;
     }
 
-    const accessibleStoreIds = await getAccessibleStoreIds(req.user.id);
+    const accessibleStoreIds = await getAccessibleStoreIdsSafely(
+      req.user.id,
+      "Bosta store scope",
+    );
     if (accessibleStoreIds.includes(requestedStoreId)) {
       return requestedStoreId;
     }
@@ -211,7 +285,14 @@ const resolveStoreScope = async (req) => {
     return "";
   }
 
-  const accessibleStoreIds = await getAccessibleStoreIds(req.user.id);
+  if (isAdmin) {
+    return "";
+  }
+
+  const accessibleStoreIds = await getAccessibleStoreIdsSafely(
+    req.user.id,
+    "Bosta store scope",
+  );
   return accessibleStoreIds.length === 1 ? accessibleStoreIds[0] : "";
 };
 
@@ -433,15 +514,98 @@ const getOrderDisplayName = (order = {}) => {
   );
 };
 
-const getOrderRevenue = (order = {}) => {
-  const data = parseJsonField(order?.data);
+const getShipmentReferenceCandidates = ({ shipment = {}, bostaDelivery = {} }) =>
+  [
+    shipment?.business_reference,
+    shipment?.order_name,
+    bostaDelivery?.businessReference,
+    bostaDelivery?.data?.businessReference,
+    bostaDelivery?.bosta_response?.businessReference,
+    bostaDelivery?.tracking_response?.businessReference,
+    bostaDelivery?.tracking_response?.data?.businessReference,
+    bostaDelivery?.BusinessReference,
+    bostaDelivery?.shopifyOrderId,
+    bostaDelivery?.data?.shopifyOrderId,
+    bostaDelivery?.bosta_response?.shopifyOrderId,
+    bostaDelivery?.tracking_response?.shopifyOrderId,
+    bostaDelivery?.tracking_response?.data?.shopifyOrderId,
+    shipment?.order_id,
+  ]
+    .map(normalizeDisplayText)
+    .filter(Boolean);
+
+const getShipmentReceiverName = (shipment = {}, bostaDelivery = {}) => {
+  const candidateReceivers = [
+    shipment?.receiver,
+    bostaDelivery?.receiver,
+    bostaDelivery?.data?.receiver,
+    bostaDelivery?.bosta_response?.receiver,
+    bostaDelivery?.tracking_response?.receiver,
+    bostaDelivery?.tracking_response?.data?.receiver,
+  ].filter(Boolean);
+
+  for (const receiver of candidateReceivers) {
+    const fullName = normalizeDisplayText(
+      receiver?.fullName ||
+        [receiver?.firstName, receiver?.lastName].filter(Boolean).join(" "),
+    );
+    if (fullName) {
+      return fullName;
+    }
+  }
+
+  return "";
+};
+
+const getFallbackShipmentBusinessReference = ({
+  shipment = {},
+  bostaDelivery = {},
+}) =>
+  getShipmentReferenceCandidates({ shipment, bostaDelivery }).find(Boolean) ||
+  null;
+
+const getFallbackShipmentOrderName = ({ shipment = {}, bostaDelivery = {} }) =>
+  normalizeDisplayText(
+    shipment?.order_name ||
+      getFallbackShipmentBusinessReference({ shipment, bostaDelivery }) ||
+      shipment?.tracking_number,
+  );
+
+const getFallbackShipmentCustomerName = ({
+  shipment = {},
+  bostaDelivery = {},
+}) =>
+  normalizeDisplayText(
+    shipment?.customer_name || getShipmentReceiverName(shipment, bostaDelivery),
+  );
+
+const getLineItemsBookedRevenue = (order = {}) => {
+  const lineItems = getOrderLineItems(order);
   return roundCurrency(
+    lineItems.reduce((sum, item) => sum + getLineItemBookedAmount(item), 0),
+  );
+};
+
+const getOrderRevenue = (order = {}, shipment = {}) => {
+  const data = parseJsonField(order?.data);
+  const explicitRevenue = roundCurrency(
     order?.total_price ||
       data?.current_total_price ||
       data?.total_price ||
-      data?.total_price_set?.shop_money?.amount ||
-      0,
+      data?.current_total_price_set?.shop_money?.amount ||
+      data?.total_price_set?.shop_money?.amount,
   );
+
+  if (explicitRevenue > 0) {
+    return explicitRevenue;
+  }
+
+  const lineItemsRevenue = getLineItemsBookedRevenue(order);
+  if (lineItemsRevenue > 0) {
+    return lineItemsRevenue;
+  }
+
+  return roundCurrency(shipment?.cod_amount || shipment?.revenue || 0);
 };
 
 const getOrderShippingCharge = (order = {}) => {
@@ -476,6 +640,21 @@ const getOrderLineItems = (order = {}) => {
   }
   const data = parseJsonField(order?.data);
   return Array.isArray(data?.line_items) ? data.line_items : [];
+};
+
+const getFirstFiniteNumber = (...values) => {
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") {
+      continue;
+    }
+
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
 };
 
 const collectTrackingValues = (value, results = []) => {
@@ -577,20 +756,10 @@ const findOrderByTrackingNumber = async ({
   shipment,
   bostaDelivery,
 }) => {
-  const references = [
-    shipment?.order_id,
-    shipment?.business_reference,
-    bostaDelivery?.businessReference,
-    bostaDelivery?.data?.businessReference,
-    bostaDelivery?.bosta_response?.businessReference,
-    bostaDelivery?.tracking_response?.businessReference,
-    bostaDelivery?.tracking_response?.data?.businessReference,
-    bostaDelivery?.shopifyOrderId,
-    bostaDelivery?.data?.shopifyOrderId,
-    bostaDelivery?.bosta_response?.shopifyOrderId,
-    bostaDelivery?.tracking_response?.shopifyOrderId,
-    bostaDelivery?.tracking_response?.data?.shopifyOrderId,
-  ].filter(Boolean);
+  const references = getShipmentReferenceCandidates({
+    shipment,
+    bostaDelivery,
+  });
 
   for (const reference of references) {
     const order = await findOrderByReference(req, reference);
@@ -618,10 +787,19 @@ const getShopifyTokenCandidates = async (req) => {
   const isAdmin = isAdminRequest(req);
   const accessibleStoreIds = isAdmin
     ? []
-    : await getAccessibleStoreIds(req.user.id);
+    : await getAccessibleStoreIdsSafely(
+        req.user.id,
+        "Bosta scanner Shopify token lookup",
+      );
   const scopedStoreIds = normalizedRequestedStoreId
     ? [normalizedRequestedStoreId]
     : accessibleStoreIds;
+  const emergencyToken = getEmergencyShopifyToken({
+    userId: req.user.id,
+    requestedStoreId:
+      normalizedRequestedStoreId ||
+      (accessibleStoreIds.length === 1 ? accessibleStoreIds[0] : ""),
+  });
 
   let query = supabase.from("shopify_tokens").select("*");
 
@@ -636,18 +814,42 @@ const getShopifyTokenCandidates = async (req) => {
   }
 
   query = query.order("updated_at", { ascending: false }).limit(5);
-  const { data, error } = await query;
-  if (error) {
+  let databaseTokens = [];
+
+  try {
+    const { data, error } = await query;
+    if (error) {
+      console.warn("Bosta scanner Shopify token lookup failed:", error.message);
+    } else {
+      databaseTokens = data || [];
+    }
+  } catch (error) {
     console.warn("Bosta scanner Shopify token lookup failed:", error.message);
-    return [];
   }
 
-  return (data || []).filter(
-    (token) =>
-      normalizeText(token?.shop) &&
-      normalizeSecret(token?.access_token) &&
-      (isAdmin || normalizeId(token?.user_id) === normalizeId(req.user.id)),
-  );
+  const combinedTokens = [
+    ...databaseTokens.filter(
+      (token) =>
+        normalizeText(token?.shop) &&
+        normalizeSecret(token?.access_token) &&
+        (isAdmin || normalizeId(token?.user_id) === normalizeId(req.user.id)),
+    ),
+    ...(emergencyToken ? [emergencyToken] : []),
+  ];
+
+  const seenTokens = new Set();
+  return combinedTokens.filter((token) => {
+    const key = [
+      normalizeText(token?.shop),
+      normalizeSecret(token?.access_token),
+      normalizeId(token?.store_id),
+    ].join("::");
+    if (!key || seenTokens.has(key)) {
+      return false;
+    }
+    seenTokens.add(key);
+    return true;
+  });
 };
 
 const fetchShopifyOrderByReference = async ({
@@ -869,12 +1071,30 @@ const getMatchedProductCost = (item = {}, productIndex) => {
     variantMatch?.variant || skuMatch?.variant || titleMatch?.variant || null;
 
   return {
-    costPrice: toNumber(
-      variant?.cost_price ?? variant?.cost ?? product?.cost_price,
+    costPrice: getFirstFiniteNumber(
+      variant?.cost_price,
+      variant?.cost,
+      product?.cost_price,
+      item?.cost_price,
+      item?.costPrice,
+      item?.cost,
     ),
-    adsCost: toNumber(product?.ads_cost),
-    operationCost: toNumber(product?.operation_cost),
-    shippingCost: toNumber(variant?.shipping_cost ?? product?.shipping_cost),
+    adsCost: getFirstFiniteNumber(
+      product?.ads_cost,
+      item?.ads_cost,
+      item?.adsCost,
+    ),
+    operationCost: getFirstFiniteNumber(
+      product?.operation_cost,
+      item?.operation_cost,
+      item?.operationCost,
+    ),
+    shippingCost: getFirstFiniteNumber(
+      variant?.shipping_cost,
+      product?.shipping_cost,
+      item?.shipping_cost,
+      item?.shippingCost,
+    ),
   };
 };
 
@@ -907,11 +1127,13 @@ const calculateOrderScanTotals = async (req, order = {}, shipment = {}) => {
       : totals.productShippingCost > 0
         ? totals.productShippingCost
         : orderShippingCharge;
-  const revenue = getOrderRevenue(order);
+  const revenue = getOrderRevenue(order, shipment);
   const totalCost = roundCurrency(totals.totalCost);
   const netProfit = roundCurrency(revenue - totalCost);
 
   return {
+    order_total: revenue,
+    product_cost: totalCost,
     revenue,
     total_cost: totalCost,
     shipping_cost: roundCurrency(shippingCost),
@@ -1179,6 +1401,18 @@ const enrichShipmentWithOrderData = async ({
   shipment,
   bostaDelivery,
 }) => {
+  const fallbackBusinessReference = getFallbackShipmentBusinessReference({
+    shipment,
+    bostaDelivery,
+  });
+  const fallbackCustomerName = getFallbackShipmentCustomerName({
+    shipment,
+    bostaDelivery,
+  });
+  const fallbackOrderName = getFallbackShipmentOrderName({
+    shipment,
+    bostaDelivery,
+  });
   const order = await findOrderByTrackingNumber({
     req,
     trackingNumber,
@@ -1187,20 +1421,10 @@ const enrichShipmentWithOrderData = async ({
   });
 
   if (!order) {
-    const references = [
-      shipment?.order_id,
-      shipment?.business_reference,
-      bostaDelivery?.businessReference,
-      bostaDelivery?.data?.businessReference,
-      bostaDelivery?.bosta_response?.businessReference,
-      bostaDelivery?.tracking_response?.businessReference,
-      bostaDelivery?.tracking_response?.data?.businessReference,
-      bostaDelivery?.shopifyOrderId,
-      bostaDelivery?.data?.shopifyOrderId,
-      bostaDelivery?.bosta_response?.shopifyOrderId,
-      bostaDelivery?.tracking_response?.shopifyOrderId,
-      bostaDelivery?.tracking_response?.data?.shopifyOrderId,
-    ].filter(Boolean);
+    const references = getShipmentReferenceCandidates({
+      shipment,
+      bostaDelivery,
+    });
 
     const liveShopifyOrder = await fetchShopifyOrderByReference({
       req,
@@ -1219,6 +1443,16 @@ const enrichShipmentWithOrderData = async ({
 
       return {
         ...shipment,
+        business_reference: fallbackBusinessReference,
+        order_name: fallbackOrderName || null,
+        customer_name: fallbackCustomerName || null,
+        has_order_match: false,
+        scan_data_source: "bosta_tracking_only",
+        scan_resolution_message: fallbackBusinessReference
+          ? `Shipment is using Bosta-only data for reference ${fallbackBusinessReference}.`
+          : "Shipment is using Bosta-only data until an order match is found.",
+        order_total: codAmount,
+        product_cost: 0,
         revenue: codAmount,
         total_cost: 0,
         shipping_cost: shippingCost,
@@ -1234,6 +1468,7 @@ const enrichShipmentWithOrderData = async ({
     );
     return {
       ...shipment,
+      business_reference: fallbackBusinessReference,
       order_id:
         liveShopifyOrder?.id ||
         liveShopifyOrder?.shopify_id ||
@@ -1241,6 +1476,9 @@ const enrichShipmentWithOrderData = async ({
         null,
       order_name: getOrderDisplayName(liveShopifyOrder),
       customer_name: getCustomerName(liveShopifyOrder),
+      has_order_match: true,
+      scan_data_source: "shopify_lookup",
+      scan_resolution_message: null,
       ...totals,
     };
   }
@@ -1248,9 +1486,13 @@ const enrichShipmentWithOrderData = async ({
   const totals = await calculateOrderScanTotals(req, order, shipment);
   return {
     ...shipment,
+    business_reference: fallbackBusinessReference,
     order_id: order.id,
     order_name: getOrderDisplayName(order),
     customer_name: getCustomerName(order),
+    has_order_match: true,
+    scan_data_source: "database_enriched",
+    scan_resolution_message: null,
     ...totals,
   };
 };

@@ -117,23 +117,44 @@ const readWorkbookRows = ({ file, sheetName = "" }) => {
   return XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 };
 
-const buildImportRows = (rows = []) =>
-  rows
-    .map((row, index) => {
-      const title = String(row?.Title || "").trim();
-      if (!title) {
-        return null;
-      }
+const buildImportRows = (rows = []) => {
+  const dedupedRows = new Map();
 
-      return {
-        sourceRowNumber: index + 2,
+  rows.forEach((row, index) => {
+    const title = String(row?.Title || "").trim();
+    if (!title) {
+      return;
+    }
+
+    const normalizedTitle = normalizeProductTitle(title);
+    const nextCostPrice = roundCurrency(
+      toNullableNumber(row?.["Production Cost"]),
+    );
+    const nextAdsCost = roundCurrency(toNullableNumber(row?.["Ad Spend"]));
+    const existing = dedupedRows.get(normalizedTitle);
+
+    if (!existing) {
+      dedupedRows.set(normalizedTitle, {
+        sourceRowNumbers: [index + 2],
         title,
-        normalizedTitle: normalizeProductTitle(title),
-        costPrice: roundCurrency(toNullableNumber(row?.["Production Cost"])),
-        adsCost: roundCurrency(toNullableNumber(row?.["Ad Spend"])),
-      };
-    })
-    .filter(Boolean);
+        normalizedTitle,
+        costPrice: nextCostPrice,
+        adsCost: nextAdsCost,
+      });
+      return;
+    }
+
+    existing.sourceRowNumbers.push(index + 2);
+    if (nextCostPrice !== null) {
+      existing.costPrice = nextCostPrice;
+    }
+    if (nextAdsCost !== null) {
+      existing.adsCost = nextAdsCost;
+    }
+  });
+
+  return Array.from(dedupedRows.values());
+};
 
 const fetchCandidateProducts = async ({ supabase, storeId = "" }) => {
   let query = supabase
@@ -173,7 +194,7 @@ const buildProductIndex = (products = []) => {
 const buildPlan = ({ importRows = [], productIndex, limit = 0 }) => {
   const matched = [];
   const unmatched = [];
-  const ambiguous = [];
+  const multiMatchTitles = [];
 
   for (const row of importRows) {
     const matches = productIndex.get(row.normalizedTitle) || [];
@@ -184,7 +205,7 @@ const buildPlan = ({ importRows = [], productIndex, limit = 0 }) => {
     }
 
     if (matches.length > 1) {
-      ambiguous.push({
+      multiMatchTitles.push({
         row,
         matches: matches.map((product) => ({
           id: product.id,
@@ -192,16 +213,17 @@ const buildPlan = ({ importRows = [], productIndex, limit = 0 }) => {
           store_id: product.store_id,
         })),
       });
-      continue;
     }
 
-    matched.push({
-      row,
-      product: matches[0],
-      update: {
-        cost_price: row.costPrice,
-        ads_cost: row.adsCost,
-      },
+    matches.forEach((product) => {
+      matched.push({
+        row,
+        product,
+        update: {
+          cost_price: row.costPrice,
+          ads_cost: row.adsCost,
+        },
+      });
     });
   }
 
@@ -211,7 +233,7 @@ const buildPlan = ({ importRows = [], productIndex, limit = 0 }) => {
   return {
     matched: limitedMatched,
     unmatched,
-    ambiguous,
+    multiMatchTitles,
     totalMatchedBeforeLimit: matched.length,
   };
 };
@@ -288,7 +310,7 @@ const main = async () => {
     import_rows: importRows.length,
     matched: plan.totalMatchedBeforeLimit,
     unmatched: plan.unmatched.length,
-    ambiguous: plan.ambiguous.length,
+    multi_product_titles: plan.multiMatchTitles.length,
     applying_now: plan.matched.length,
     sample_matches: plan.matched.slice(0, 10).map((entry) => ({
       xlsx_title: entry.row.title,
@@ -298,10 +320,12 @@ const main = async () => {
       next_cost_price: entry.update.cost_price,
       previous_ads_cost: entry.product.ads_cost,
       next_ads_cost: entry.update.ads_cost,
+      source_rows: entry.row.sourceRowNumbers,
     })),
     sample_unmatched: plan.unmatched.slice(0, 10).map((row) => row.title),
-    sample_ambiguous: plan.ambiguous.slice(0, 5).map((entry) => ({
+    sample_multi_product_titles: plan.multiMatchTitles.slice(0, 5).map((entry) => ({
       xlsx_title: entry.row.title,
+      source_rows: entry.row.sourceRowNumbers,
       matches: entry.matches,
     })),
   };

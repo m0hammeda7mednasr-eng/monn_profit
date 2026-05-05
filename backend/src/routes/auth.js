@@ -1,7 +1,10 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import bcryptjs from "bcryptjs";
-import { supabase } from "../supabaseClient.js";
+import {
+  getSupabaseConfigErrorMessage,
+  supabase,
+} from "../supabaseClient.js";
 import {
   buildPermissionsForRole,
   getUserPermissions,
@@ -22,6 +25,9 @@ const SELF_REGISTRATION_DISABLED_ERROR =
   "Self-service registration is disabled. Ask an admin to create your account.";
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+const LOCAL_AUTH_CONFIG_ERROR = getSupabaseConfigErrorMessage();
+const getAuthUnavailableErrorMessage = () =>
+  LOCAL_AUTH_CONFIG_ERROR || AUTH_SERVICE_UNAVAILABLE_ERROR;
 
 const resolveRegistrationPolicy = async () => {
   const allowSelfRegistration =
@@ -62,6 +68,10 @@ const signUserToken = (user) =>
 // Register
 router.post("/register", async (req, res) => {
   try {
+    if (LOCAL_AUTH_CONFIG_ERROR) {
+      return res.status(503).json({ error: LOCAL_AUTH_CONFIG_ERROR });
+    }
+
     const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || "");
     const name = String(req.body?.name || "").trim();
@@ -99,7 +109,7 @@ router.post("/register", async (req, res) => {
 
     if (userError) {
       if (isTransientSupabaseError(userError)) {
-        return res.status(503).json({ error: AUTH_SERVICE_UNAVAILABLE_ERROR });
+        return res.status(503).json({ error: getAuthUnavailableErrorMessage() });
       }
 
       if (userError.code === "23505") {
@@ -135,7 +145,7 @@ router.post("/register", async (req, res) => {
     console.error("Register error:", error);
     res.status(isTransientSupabaseError(error) ? 503 : 500).json({
       error: isTransientSupabaseError(error)
-        ? AUTH_SERVICE_UNAVAILABLE_ERROR
+        ? getAuthUnavailableErrorMessage()
         : "An error occurred while creating the account",
     });
   }
@@ -144,6 +154,10 @@ router.post("/register", async (req, res) => {
 // Login
 router.post("/login", async (req, res) => {
   try {
+    if (LOCAL_AUTH_CONFIG_ERROR) {
+      return res.status(503).json({ error: LOCAL_AUTH_CONFIG_ERROR });
+    }
+
     const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || "");
 
@@ -166,7 +180,7 @@ router.post("/login", async (req, res) => {
       console.error("Login user lookup error:", error);
       return res.status(isTransientSupabaseError(error) ? 503 : 500).json({
         error: isTransientSupabaseError(error)
-          ? AUTH_SERVICE_UNAVAILABLE_ERROR
+          ? getAuthUnavailableErrorMessage()
           : "Failed to validate login credentials",
       });
     }
@@ -206,7 +220,7 @@ router.post("/login", async (req, res) => {
     console.error("Login error:", error);
     res.status(isTransientSupabaseError(error) ? 503 : 500).json({
       error: isTransientSupabaseError(error)
-        ? AUTH_SERVICE_UNAVAILABLE_ERROR
+        ? getAuthUnavailableErrorMessage()
         : "An error occurred while signing in",
     });
   }
