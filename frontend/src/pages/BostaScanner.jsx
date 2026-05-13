@@ -1,4 +1,11 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   DollarSign,
   Download,
@@ -42,6 +49,8 @@ import {
 } from "../utils/viewCache";
 
 const SCANNER_CACHE_SCOPE = "bosta-scanner:history";
+const AUTO_SUBMIT_SCAN_DELAY_MS = 120;
+const MIN_AUTO_SUBMIT_TRACKING_LENGTH = 6;
 const ENABLE_VERCEL_BOSTA_FALLBACK =
   String(process.env.REACT_APP_ENABLE_VERCEL_BOSTA_FALLBACK || "")
     .trim()
@@ -336,7 +345,10 @@ export default function BostaScanner() {
   const [error, setError] = useState("");
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [cacheHydrated, setCacheHydrated] = useState(false);
+  const formRef = useRef(null);
   const inputRef = useRef(null);
+  const autoSubmitTimerRef = useRef(null);
+  const lastAutoSubmittedTrackingRef = useRef("");
   const latestScanIdByTrackingRef = useRef(new Map());
   const deferredSearchTerm = useDeferredValue(filters.searchTerm);
   const cacheKey = useMemo(
@@ -450,9 +462,25 @@ export default function BostaScanner() {
     (filters.timePreset === "custom" &&
       (Boolean(filters.customFrom) || Boolean(filters.customTo)));
 
-  useEffect(() => {
+  const focusScannerInput = useCallback(() => {
     const focusInput = () => {
       inputRef.current?.focus();
+    };
+
+    if (
+      typeof window !== "undefined" &&
+      typeof window.requestAnimationFrame === "function"
+    ) {
+      window.requestAnimationFrame(focusInput);
+      return;
+    }
+
+    focusInput();
+  }, []);
+
+  useEffect(() => {
+    const focusInput = () => {
+      focusScannerInput();
     };
 
     focusInput();
@@ -461,7 +489,60 @@ export default function BostaScanner() {
     return () => {
       window.removeEventListener("focus", focusInput);
     };
-  }, []);
+  }, [focusScannerInput]);
+
+  useEffect(() => {
+    const normalizedCode = normalizeTrackingNumber(barcode);
+
+    if (!normalizedCode) {
+      lastAutoSubmittedTrackingRef.current = "";
+      return undefined;
+    }
+
+    if (
+      normalizedCode.length < MIN_AUTO_SUBMIT_TRACKING_LENGTH ||
+      lastAutoSubmittedTrackingRef.current === normalizedCode
+    ) {
+      return undefined;
+    }
+
+    if (autoSubmitTimerRef.current) {
+      window.clearTimeout(autoSubmitTimerRef.current);
+    }
+
+    autoSubmitTimerRef.current = window.setTimeout(() => {
+      autoSubmitTimerRef.current = null;
+
+      if (document.activeElement !== inputRef.current) {
+        return;
+      }
+
+      const currentCode = normalizeTrackingNumber(inputRef.current?.value);
+      if (
+        currentCode.length < MIN_AUTO_SUBMIT_TRACKING_LENGTH ||
+        lastAutoSubmittedTrackingRef.current === currentCode
+      ) {
+        return;
+      }
+
+      lastAutoSubmittedTrackingRef.current = currentCode;
+      if (typeof formRef.current?.requestSubmit === "function") {
+        formRef.current.requestSubmit();
+        return;
+      }
+
+      formRef.current?.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+    }, AUTO_SUBMIT_SCAN_DELAY_MS);
+
+    return () => {
+      if (autoSubmitTimerRef.current) {
+        window.clearTimeout(autoSubmitTimerRef.current);
+        autoSubmitTimerRef.current = null;
+      }
+    };
+  }, [barcode]);
 
   useEffect(() => {
     let active = true;
@@ -505,6 +586,7 @@ export default function BostaScanner() {
       setError(
         select("من فضلك أدخل رقم التتبع", "Please enter tracking number"),
       );
+      focusScannerInput();
       return;
     }
 
@@ -516,6 +598,7 @@ export default function BostaScanner() {
         ),
       );
       setBarcode(trimmedBarcode);
+      focusScannerInput();
       return;
     }
 
@@ -530,7 +613,7 @@ export default function BostaScanner() {
           scanned_at: new Date().toISOString(),
         }),
       );
-      inputRef.current?.focus();
+      focusScannerInput();
       return;
     }
 
@@ -546,7 +629,7 @@ export default function BostaScanner() {
           }),
         ),
       );
-      inputRef.current?.focus();
+      focusScannerInput();
       return;
     }
 
@@ -556,7 +639,7 @@ export default function BostaScanner() {
     latestScanIdByTrackingRef.current.set(trimmedBarcode, scanId);
     setError("");
     setBarcode("");
-    inputRef.current?.focus();
+    focusScannerInput();
 
     setScannedItems((current) =>
       upsertScannerItemAtBottom(
@@ -716,7 +799,7 @@ export default function BostaScanner() {
         setError(errorMessage);
       } finally {
         setProcessingCount((current) => Math.max(0, current - 1));
-        inputRef.current?.focus();
+        focusScannerInput();
       }
     })();
   };
@@ -726,14 +809,14 @@ export default function BostaScanner() {
     setScannedItems((current) =>
       current.filter((item) => item.tracking_number !== trackingNumber),
     );
-    inputRef.current?.focus();
+    focusScannerInput();
   };
 
   const handleClearAll = () => {
     if (window.confirm(select("هل تريد مسح كل البيانات؟", "Clear all data?"))) {
       latestScanIdByTrackingRef.current.clear();
       setScannedItems([]);
-      inputRef.current?.focus();
+      focusScannerInput();
     }
   };
 
@@ -891,7 +974,7 @@ export default function BostaScanner() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <form onSubmit={handleScan} className="space-y-4">
+            <form ref={formRef} onSubmit={handleScan} className="space-y-4">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
                   {select("رقم التتبع", "Tracking Number")}

@@ -23,9 +23,9 @@ Large API list responses are capped by default:
 - Orders API visible cap: `600` rows
 
 Shopify background sync was also slowed down from an aggressive near-continuous
-cycle. In production it is disabled by default unless explicitly enabled. Manual
-app features still load from the already-synced database, but Shopify data will
-not keep syncing in the background until this is turned back on.
+cycle. It is disabled by default in every environment unless explicitly enabled.
+Manual app features still load from the already-synced database, but Shopify
+data will not keep syncing in the background until this is turned back on.
 
 ## Railway variables
 

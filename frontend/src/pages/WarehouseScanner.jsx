@@ -20,6 +20,9 @@ import { subscribeToSharedDataUpdates } from "../utils/realtime";
 const formatCount = (value) =>
   formatNumber(value, { maximumFractionDigits: 0 });
 
+const AUTO_SUBMIT_SCAN_DELAY_MS = 120;
+const MIN_AUTO_SUBMIT_CODE_LENGTH = 3;
+
 const isWarehouseEvent = (event) =>
   String(event?.source || "").toLowerCase().includes("/warehouse");
 
@@ -39,7 +42,11 @@ export default function WarehouseScanner() {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { isRTL, select } = useLocale();
+  const formRef = useRef(null);
   const inputRef = useRef(null);
+  const autoSubmitTimerRef = useRef(null);
+  const lastAutoSubmittedCodeRef = useRef("");
+  const submittingRef = useRef(false);
 
   const [movementType, setMovementType] = useState("in");
   const [scanCode, setScanCode] = useState("");
@@ -110,6 +117,79 @@ export default function WarehouseScanner() {
     fetchRecentScans();
   }, [fetchRecentScans]);
 
+  const focusScannerInput = useCallback(() => {
+    const focusInput = () => {
+      inputRef.current?.focus();
+    };
+
+    if (
+      typeof window !== "undefined" &&
+      typeof window.requestAnimationFrame === "function"
+    ) {
+      window.requestAnimationFrame(focusInput);
+      return;
+    }
+
+    focusInput();
+  }, []);
+
+  useEffect(() => {
+    const normalizedCode = String(scanCode || "").trim();
+
+    if (!normalizedCode) {
+      lastAutoSubmittedCodeRef.current = "";
+      return undefined;
+    }
+
+    if (
+      submittingRef.current ||
+      normalizedCode.length < MIN_AUTO_SUBMIT_CODE_LENGTH ||
+      lastAutoSubmittedCodeRef.current === normalizedCode
+    ) {
+      return undefined;
+    }
+
+    if (autoSubmitTimerRef.current) {
+      window.clearTimeout(autoSubmitTimerRef.current);
+    }
+
+    autoSubmitTimerRef.current = window.setTimeout(() => {
+      autoSubmitTimerRef.current = null;
+
+      if (
+        submittingRef.current ||
+        document.activeElement !== inputRef.current
+      ) {
+        return;
+      }
+
+      const currentCode = String(inputRef.current?.value || "").trim();
+      if (
+        currentCode.length < MIN_AUTO_SUBMIT_CODE_LENGTH ||
+        lastAutoSubmittedCodeRef.current === currentCode
+      ) {
+        return;
+      }
+
+      lastAutoSubmittedCodeRef.current = currentCode;
+      if (typeof formRef.current?.requestSubmit === "function") {
+        formRef.current.requestSubmit();
+        return;
+      }
+
+      formRef.current?.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+    }, AUTO_SUBMIT_SCAN_DELAY_MS);
+
+    return () => {
+      if (autoSubmitTimerRef.current) {
+        window.clearTimeout(autoSubmitTimerRef.current);
+        autoSubmitTimerRef.current = null;
+      }
+    };
+  }, [scanCode]);
+
   useEffect(() => {
     const unsubscribe = subscribeToSharedDataUpdates((event) => {
       if (!isWarehouseEvent(event)) {
@@ -129,13 +209,32 @@ export default function WarehouseScanner() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    const trimmedScanCode = String(scanCode || "").trim();
+
+    if (submittingRef.current) {
+      focusScannerInput();
+      return;
+    }
+
+    if (!trimmedScanCode) {
+      setError(
+        select(
+          "من فضلك امسح أو اكتب كود المنتج.",
+          "Please scan or enter a product code.",
+        ),
+      );
+      focusScannerInput();
+      return;
+    }
+
+    submittingRef.current = true;
     setSubmitting(true);
     setError("");
     setSuccess("");
 
     try {
       const response = await warehouseAPI.scan({
-        code: scanCode,
+        code: trimmedScanCode,
         movement_type: movementType,
         quantity: quantityNumber,
         note,
@@ -164,8 +263,8 @@ export default function WarehouseScanner() {
       setScanCode("");
       setNote("");
       setQuantity("1");
-      await fetchRecentScans({ silent: true });
-      inputRef.current?.focus();
+      focusScannerInput();
+      void fetchRecentScans({ silent: true });
     } catch (requestError) {
       console.error("Error applying warehouse scan:", requestError);
       setError(
@@ -175,8 +274,9 @@ export default function WarehouseScanner() {
             "Failed to save warehouse scan",
           ),
       );
-      inputRef.current?.focus();
+      focusScannerInput();
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -261,7 +361,11 @@ export default function WarehouseScanner() {
                   />
                 </div>
 
-                <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+                <form
+                  ref={formRef}
+                  onSubmit={handleSubmit}
+                  className="mt-5 space-y-4"
+                >
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                       {select("كود المسح", "Scan Code")}

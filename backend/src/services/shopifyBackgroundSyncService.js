@@ -18,7 +18,7 @@ const toBooleanEnvFlag = (value, fallback = false) => {
   return fallback;
 };
 
-const DEFAULT_BACKGROUND_SYNC_ENABLED = process.env.NODE_ENV !== "production";
+const DEFAULT_BACKGROUND_SYNC_ENABLED = false;
 const BACKGROUND_SYNC_ENABLED = toBooleanEnvFlag(
   process.env.SHOPIFY_BACKGROUND_SYNC_ENABLED,
   DEFAULT_BACKGROUND_SYNC_ENABLED,
