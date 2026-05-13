@@ -100,7 +100,11 @@ const isQueryRetryableError = (error) => {
 };
 
 const getRequestedStoreId = (req) => {
-  const candidates = [req.headers["x-store-id"], req.body?.store_id, req.query?.store_id];
+  const candidates = [
+    req.headers["x-store-id"],
+    req.body?.store_id,
+    req.query?.store_id,
+  ];
 
   for (const value of candidates) {
     const normalized = String(value || "").trim();
@@ -113,7 +117,9 @@ const getRequestedStoreId = (req) => {
 };
 
 const resolveIsAdmin = (req) =>
-  Boolean(req.user?.isAdmin || String(req.user?.role || "").toLowerCase() === "admin");
+  Boolean(
+    req.user?.isAdmin || String(req.user?.role || "").toLowerCase() === "admin",
+  );
 
 const normalizeSku = (value) => normalizeWarehouseCode(value);
 
@@ -137,13 +143,19 @@ const getPagination = (query = {}) => {
         ? Math.min(requestedLimit, MAX_LIMIT)
         : DEFAULT_LIMIT,
     offset:
-      Number.isFinite(requestedOffset) && requestedOffset >= 0 ? requestedOffset : 0,
+      Number.isFinite(requestedOffset) && requestedOffset >= 0
+        ? requestedOffset
+        : 0,
   };
 };
 
 const getSortOptions = (query = {}) => {
-  const rawField = String(query.sort_by || "").trim().toLowerCase();
-  const rawDirection = String(query.sort_dir || "asc").trim().toLowerCase();
+  const rawField = String(query.sort_by || "")
+    .trim()
+    .toLowerCase();
+  const rawDirection = String(query.sort_dir || "asc")
+    .trim()
+    .toLowerCase();
 
   return {
     sortBy: STOCK_SORT_FIELDS.has(rawField) ? rawField : "title",
@@ -223,7 +235,9 @@ const getAdminStoreIds = async () => {
       if (error) {
         throw error;
       }
-      return (data || []).map((row) => String(row?.id || "").trim()).filter(Boolean);
+      return (data || [])
+        .map((row) => String(row?.id || "").trim())
+        .filter(Boolean);
     },
     async () => {
       const { data, error } = await db
@@ -236,7 +250,9 @@ const getAdminStoreIds = async () => {
       }
       return Array.from(
         new Set(
-          (data || []).map((row) => String(row?.store_id || "").trim()).filter(Boolean),
+          (data || [])
+            .map((row) => String(row?.store_id || "").trim())
+            .filter(Boolean),
         ),
       );
     },
@@ -284,7 +300,10 @@ const resolveStoreContext = async (req) => {
       throw createHttpError(400, "No connected store is available yet");
     }
 
-    throw createHttpError(400, "Select a store first before using warehouse tools");
+    throw createHttpError(
+      400,
+      "Select a store first before using warehouse tools",
+    );
   }
 
   const accessibleStoreIds = await getAccessibleStoreIds(req.user?.id);
@@ -320,7 +339,10 @@ const resolveStoreContext = async (req) => {
     throw createHttpError(400, "No store is connected to this account yet");
   }
 
-  throw createHttpError(400, "Select a store first before using warehouse tools");
+  throw createHttpError(
+    400,
+    "Select a store first before using warehouse tools",
+  );
 };
 
 const loadAllStoreProducts = async (storeId) => {
@@ -483,7 +505,8 @@ const serializeWarehouseVariantRow = (variantRow, inventoryRow) => {
     inventory_item_id: variantRow?.inventory_item_id || null,
     store_id: variantRow?.store_id || inventoryRow?.store_id || null,
     title: variantRow?.title || "Archived product",
-    product_title: variantRow?.product_title || variantRow?.title || "Archived product",
+    product_title:
+      variantRow?.product_title || variantRow?.title || "Archived product",
     variant_title: variantRow?.variant_title || "Archived Variant",
     display_title:
       variantRow?.display_title ||
@@ -492,11 +515,13 @@ const serializeWarehouseVariantRow = (variantRow, inventoryRow) => {
     vendor: variantRow?.vendor || "",
     product_type: variantRow?.product_type || "",
     warehouse_code:
-      variantRow?.warehouse_code || normalizeSku(variantRow?.sku || inventoryRow?.sku),
+      variantRow?.warehouse_code ||
+      normalizeSku(variantRow?.sku || inventoryRow?.sku),
     warehouse_code_source: variantRow?.warehouse_code_source || "legacy",
     sku: variantRow?.sku || inventoryRow?.sku || "",
     normalized_sku:
-      variantRow?.normalized_sku || normalizeSku(variantRow?.sku || inventoryRow?.sku),
+      variantRow?.normalized_sku ||
+      normalizeSku(variantRow?.sku || inventoryRow?.sku),
     barcode: variantRow?.barcode || "",
     normalized_barcode:
       variantRow?.normalized_barcode || normalizeSku(variantRow?.barcode),
@@ -507,7 +532,6 @@ const serializeWarehouseVariantRow = (variantRow, inventoryRow) => {
       inventoryRow?.sku ||
       "",
     barcode_or_sku_label: variantRow?.barcode_or_sku_label || "Code",
-    image_url: variantRow?.image_url || "",
     option_values: Array.isArray(variantRow?.option_values)
       ? variantRow.option_values
       : [],
@@ -534,7 +558,10 @@ const serializeWarehouseVariantRow = (variantRow, inventoryRow) => {
     last_synced_at: variantRow?.last_synced_at || null,
     created_at: variantRow?.created_at || inventoryRow?.created_at || null,
     updated_at:
-      inventoryRow?.updated_at || variantRow?.updated_at || variantRow?.created_at || null,
+      inventoryRow?.updated_at ||
+      variantRow?.updated_at ||
+      variantRow?.created_at ||
+      null,
   };
 };
 
@@ -697,7 +724,8 @@ const updateLocalProductsAfterShopifySync = async ({
           (row) =>
             (variantId && String(row?.variant_id || "").trim() === variantId) ||
             (inventoryItemId &&
-              String(row?.inventory_item_id || "").trim() === inventoryItemId) ||
+              String(row?.inventory_item_id || "").trim() ===
+                inventoryItemId) ||
             (normalizedVariantSku &&
               normalizeSku(row?.sku) === normalizedVariantSku),
         );
@@ -727,7 +755,9 @@ const updateLocalProductsAfterShopifySync = async ({
       const matchedRow = productRows[0] || null;
       if (matchedRow) {
         nextInventoryQuantity = toNumber(matchedRow.available);
-        if (toNumber(parsedData?.inventory_quantity) !== nextInventoryQuantity) {
+        if (
+          toNumber(parsedData?.inventory_quantity) !== nextInventoryQuantity
+        ) {
           dataChanged = true;
         }
 
@@ -806,8 +836,12 @@ const sortWarehouseRows = (rows, { sortBy, ascending }) => {
         break;
       case "title":
       default:
-        leftValue = String(left?.display_title || left?.title || "").toLowerCase();
-        rightValue = String(right?.display_title || right?.title || "").toLowerCase();
+        leftValue = String(
+          left?.display_title || left?.title || "",
+        ).toLowerCase();
+        rightValue = String(
+          right?.display_title || right?.title || "",
+        ).toLowerCase();
         break;
     }
 
@@ -818,7 +852,9 @@ const sortWarehouseRows = (rows, { sortBy, ascending }) => {
       return 1 * direction;
     }
 
-    return String(left?.warehouse_code || left?.normalized_sku || "").localeCompare(
+    return String(
+      left?.warehouse_code || left?.normalized_sku || "",
+    ).localeCompare(
       String(right?.warehouse_code || right?.normalized_sku || ""),
     );
   });
@@ -937,10 +973,13 @@ const persistLocalWarehouseTracking = async ({
     throw createHttpError(404, "Matched product no longer exists locally");
   }
 
-  const currentSnapshot = getProductWarehouseInventorySnapshot(productRow.data, {
-    variantId: product.variant_id,
-    sku: product.sku,
-  });
+  const currentSnapshot = getProductWarehouseInventorySnapshot(
+    productRow.data,
+    {
+      variantId: product.variant_id,
+      sku: product.sku,
+    },
+  );
   const currentWarehouseQuantity = toNumber(currentSnapshot.quantity);
   const nextWarehouseQuantity = getNextWarehouseQuantity({
     product,
@@ -977,19 +1016,18 @@ const persistLocalWarehouseTracking = async ({
 
   clearProductCatalog(storeId);
 
-  const refreshedProduct =
-    (await findCatalogVariantByScanCode({
-      storeId,
-      scanCode: product.warehouse_code,
-    })) || {
-      ...product,
-      local_warehouse_quantity: nextWarehouseQuantity,
-      local_last_scanned_at: nowIso,
-      local_last_movement_type: movementType,
-      local_last_movement_quantity: quantity,
-      local_created_at: currentSnapshot.created_at || nowIso,
-      local_updated_at: nowIso,
-    };
+  const refreshedProduct = (await findCatalogVariantByScanCode({
+    storeId,
+    scanCode: product.warehouse_code,
+  })) || {
+    ...product,
+    local_warehouse_quantity: nextWarehouseQuantity,
+    local_last_scanned_at: nowIso,
+    local_last_movement_type: movementType,
+    local_last_movement_quantity: quantity,
+    local_created_at: currentSnapshot.created_at || nowIso,
+    local_updated_at: nowIso,
+  };
 
   return {
     savedInventory: buildMirroredInventoryRow({
@@ -1146,30 +1184,49 @@ const serializeScanProduct = (product) => ({
   price: product?.price ?? null,
   barcode: product?.barcode || "",
   image_url: product?.image_url || "",
-  option_values: Array.isArray(product?.option_values) ? product.option_values : [],
+  option_values: Array.isArray(product?.option_values)
+    ? product.option_values
+    : [],
 });
 
 const enrichScanEvent = (scan, catalog) => {
   const normalizedCode = normalizeSku(scan?.sku || scan?.scan_code);
-  const variantRow = normalizedCode ? catalog.rowsByAnyCode.get(normalizedCode) : null;
+  const variantRow = normalizedCode
+    ? catalog.rowsByAnyCode.get(normalizedCode)
+    : null;
   const fallbackProduct = scan?.product || {};
 
   return {
     ...scan,
     product: {
-      id: variantRow?.product_id || fallbackProduct?.id || scan?.product_id || null,
-      product_id: variantRow?.product_id || fallbackProduct?.id || scan?.product_id || null,
+      id:
+        variantRow?.product_id ||
+        fallbackProduct?.id ||
+        scan?.product_id ||
+        null,
+      product_id:
+        variantRow?.product_id ||
+        fallbackProduct?.id ||
+        scan?.product_id ||
+        null,
       variant_id: variantRow?.variant_id || null,
       title: variantRow?.title || fallbackProduct?.title || "Archived product",
       product_title:
-        variantRow?.product_title || fallbackProduct?.title || "Archived product",
+        variantRow?.product_title ||
+        fallbackProduct?.title ||
+        "Archived product",
       variant_title: variantRow?.variant_title || "Unknown Variant",
       display_title:
-        variantRow?.display_title || fallbackProduct?.title || scan?.sku || scan?.scan_code || "-",
+        variantRow?.display_title ||
+        fallbackProduct?.title ||
+        scan?.sku ||
+        scan?.scan_code ||
+        "-",
       warehouse_code: variantRow?.warehouse_code || normalizedCode || "",
       warehouse_code_source: variantRow?.warehouse_code_source || "legacy",
       sku: variantRow?.sku || fallbackProduct?.sku || scan?.sku || "-",
-      normalized_sku: variantRow?.normalized_sku || normalizeSku(variantRow?.sku),
+      normalized_sku:
+        variantRow?.normalized_sku || normalizeSku(variantRow?.sku),
       vendor: variantRow?.vendor || fallbackProduct?.vendor || "",
       image_url: variantRow?.image_url || "",
       barcode: variantRow?.barcode || "",
@@ -1195,9 +1252,11 @@ const writeActivityLog = async ({
   try {
     const { error } = await insertActivityLog({
       user_id: userId,
-      action: movementType === "in" ? "warehouse_scan_in" : "warehouse_scan_out",
+      action:
+        movementType === "in" ? "warehouse_scan_in" : "warehouse_scan_out",
       entity_type: "warehouse_variant",
-      entity_id: product?.variant_id || product?.product_id || product?.id || null,
+      entity_id:
+        product?.variant_id || product?.product_id || product?.id || null,
       entity_name:
         product?.display_title || product?.title || product?.sku || scanCode,
       details: {
@@ -1225,48 +1284,52 @@ const writeActivityLog = async ({
 
 router.use(authenticateToken);
 
-router.get("/stock", requirePermission("can_view_warehouse"), async (req, res) => {
-  try {
-    const { storeId } = await resolveStoreContext(req);
-    const pagination = getPagination(req.query);
-    const sortOptions = getSortOptions(req.query);
-    const inventoryState = await loadWarehouseInventoryState(storeId);
-    const sortedRows = sortWarehouseRows(inventoryState.rows, sortOptions);
-    const rows = sortedRows.slice(
-      pagination.offset,
-      pagination.offset + pagination.limit,
-    );
-
-    res.json({
-      ...buildPaginatedCollection(rows, pagination),
-      store_id: storeId,
-      generated_at: new Date().toISOString(),
-      schema_ready: inventoryState.warehouseTablesReady,
-      setup_required: !inventoryState.warehouseTablesReady,
-      tracking_mode: inventoryState.trackingMode,
-      message: inventoryState.warehouseTablesReady
-        ? null
-        : "Warehouse tables are not deployed yet. Showing local warehouse stock saved on the product record.",
-    });
-  } catch (error) {
-    console.error("Error fetching warehouse stock:", error);
-
-    if (isSchemaCompatibilityError(error) || isQueryRetryableError(error)) {
-      return res.json(
-        buildWarehouseSetupResponse({
-          limit: getPagination(req.query).limit,
-          offset: getPagination(req.query).offset,
-          storeId: getRequestedStoreId(req),
-          message: "Warehouse tables are not deployed yet",
-        }),
+router.get(
+  "/stock",
+  requirePermission("can_view_warehouse"),
+  async (req, res) => {
+    try {
+      const { storeId } = await resolveStoreContext(req);
+      const pagination = getPagination(req.query);
+      const sortOptions = getSortOptions(req.query);
+      const inventoryState = await loadWarehouseInventoryState(storeId);
+      const sortedRows = sortWarehouseRows(inventoryState.rows, sortOptions);
+      const rows = sortedRows.slice(
+        pagination.offset,
+        pagination.offset + pagination.limit,
       );
-    }
 
-    res.status(error.status || 500).json({
-      error: error.status ? error.message : "Failed to fetch warehouse stock",
-    });
-  }
-});
+      res.json({
+        ...buildPaginatedCollection(rows, pagination),
+        store_id: storeId,
+        generated_at: new Date().toISOString(),
+        schema_ready: inventoryState.warehouseTablesReady,
+        setup_required: !inventoryState.warehouseTablesReady,
+        tracking_mode: inventoryState.trackingMode,
+        message: inventoryState.warehouseTablesReady
+          ? null
+          : "Warehouse tables are not deployed yet. Showing local warehouse stock saved on the product record.",
+      });
+    } catch (error) {
+      console.error("Error fetching warehouse stock:", error);
+
+      if (isSchemaCompatibilityError(error) || isQueryRetryableError(error)) {
+        return res.json(
+          buildWarehouseSetupResponse({
+            limit: getPagination(req.query).limit,
+            offset: getPagination(req.query).offset,
+            storeId: getRequestedStoreId(req),
+            message: "Warehouse tables are not deployed yet",
+          }),
+        );
+      }
+
+      res.status(error.status || 500).json({
+        error: error.status ? error.message : "Failed to fetch warehouse stock",
+      });
+    }
+  },
+);
 
 router.post(
   "/sync-to-shopify",
@@ -1437,169 +1500,182 @@ router.post(
       console.error("Error syncing warehouse stock to Shopify:", error);
 
       res.status(error.status || 500).json({
-        error:
-          error.status
-            ? error.message
-            : "Failed to sync warehouse stock to Shopify",
+        error: error.status
+          ? error.message
+          : "Failed to sync warehouse stock to Shopify",
       });
     }
   },
 );
 
-router.get("/scans", requirePermission("can_view_warehouse"), async (req, res) => {
-  try {
-    const { storeId } = await resolveStoreContext(req);
-    const pagination = getPagination(req.query);
-    const catalog = await getWarehouseProductCatalog(storeId);
-
-    const { data, error } = await db
-      .from("warehouse_scan_events")
-      .select(
-        "id, store_id, sku, product_id, user_id, movement_type, quantity, scan_code, note, created_at, product:products(id, title, sku, vendor), user:users(id, name, email)",
-      )
-      .eq("store_id", storeId)
-      .order("created_at", { ascending: false })
-      .range(pagination.offset, pagination.offset + pagination.limit - 1);
-
-    if (error) {
-      throw error;
-    }
-
-    const rows = (data || []).map((scan) => enrichScanEvent(scan, catalog));
-
-    res.json({
-      ...buildPaginatedCollection(rows, pagination),
-      store_id: storeId,
-      generated_at: new Date().toISOString(),
-    });
-  } catch (error) {
-    if (isSchemaCompatibilityError(error)) {
+router.get(
+  "/scans",
+  requirePermission("can_view_warehouse"),
+  async (req, res) => {
+    try {
+      const { storeId } = await resolveStoreContext(req);
       const pagination = getPagination(req.query);
-      const requestedStoreId = getRequestedStoreId(req);
+      const catalog = await getWarehouseProductCatalog(storeId);
 
-      return res.json({
-        ...buildPaginatedCollection([], pagination),
-        store_id: requestedStoreId,
+      const { data, error } = await db
+        .from("warehouse_scan_events")
+        .select(
+          "id, store_id, sku, product_id, user_id, movement_type, quantity, scan_code, note, created_at, product:products(id, title, sku, vendor), user:users(id, name, email)",
+        )
+        .eq("store_id", storeId)
+        .order("created_at", { ascending: false })
+        .range(pagination.offset, pagination.offset + pagination.limit - 1);
+
+      if (error) {
+        throw error;
+      }
+
+      const rows = (data || []).map((scan) => enrichScanEvent(scan, catalog));
+
+      res.json({
+        ...buildPaginatedCollection(rows, pagination),
+        store_id: storeId,
         generated_at: new Date().toISOString(),
-        schema_ready: false,
-        setup_required: true,
-        tracking_mode: "local_product_data",
-        message:
-          "Warehouse scan history is not available yet. Scanner actions still update local warehouse stock.",
+      });
+    } catch (error) {
+      if (isSchemaCompatibilityError(error)) {
+        const pagination = getPagination(req.query);
+        const requestedStoreId = getRequestedStoreId(req);
+
+        return res.json({
+          ...buildPaginatedCollection([], pagination),
+          store_id: requestedStoreId,
+          generated_at: new Date().toISOString(),
+          schema_ready: false,
+          setup_required: true,
+          tracking_mode: "local_product_data",
+          message:
+            "Warehouse scan history is not available yet. Scanner actions still update local warehouse stock.",
+        });
+      }
+
+      console.error("Error fetching warehouse scans:", error);
+
+      res.status(error.status || 500).json({
+        error: error.status
+          ? error.message
+          : "Failed to fetch warehouse scan history",
       });
     }
+  },
+);
 
-    console.error("Error fetching warehouse scans:", error);
+router.post(
+  "/scan",
+  requirePermission("can_edit_warehouse"),
+  async (req, res) => {
+    try {
+      const { storeId } = await resolveStoreContext(req);
+      const movementType = String(req.body?.movement_type || "")
+        .trim()
+        .toLowerCase();
+      const quantity = toPositiveInteger(req.body?.quantity, 1);
+      const scanCode = String(req.body?.code || req.body?.sku || "").trim();
+      const normalizedScanCode = normalizeSku(scanCode);
+      const note = String(req.body?.note || "").trim();
 
-    res.status(error.status || 500).json({
-      error: error.status ? error.message : "Failed to fetch warehouse scan history",
-    });
-  }
-});
+      if (!normalizedScanCode) {
+        throw createHttpError(400, "Scan code is required");
+      }
 
-router.post("/scan", requirePermission("can_edit_warehouse"), async (req, res) => {
-  try {
-    const { storeId } = await resolveStoreContext(req);
-    const movementType = String(req.body?.movement_type || "").trim().toLowerCase();
-    const quantity = toPositiveInteger(req.body?.quantity, 1);
-    const scanCode = String(req.body?.code || req.body?.sku || "").trim();
-    const normalizedScanCode = normalizeSku(scanCode);
-    const note = String(req.body?.note || "").trim();
+      if (!MOVEMENT_TYPES.has(movementType)) {
+        throw createHttpError(400, "movement_type must be either in or out");
+      }
 
-    if (!normalizedScanCode) {
-      throw createHttpError(400, "Scan code is required");
-    }
+      const product = await findCatalogVariantByScanCode({
+        storeId,
+        scanCode: normalizedScanCode,
+      });
 
-    if (!MOVEMENT_TYPES.has(movementType)) {
-      throw createHttpError(400, "movement_type must be either in or out");
-    }
+      if (!product) {
+        throw createHttpError(
+          404,
+          `No product was found for code ${normalizedScanCode} in the selected store`,
+        );
+      }
 
-    const product = await findCatalogVariantByScanCode({
-      storeId,
-      scanCode: normalizedScanCode,
-    });
-
-    if (!product) {
-      throw createHttpError(
-        404,
-        `No product was found for code ${normalizedScanCode} in the selected store`,
-      );
-    }
-
-    const nowIso = new Date().toISOString();
-    const trackingResult = await persistWarehouseTracking({
-      storeId,
-      userId: req.user?.id,
-      product,
-      movementType,
-      quantity,
-      scanCode,
-      note,
-      nowIso,
-    });
-    const refreshedProduct = trackingResult.refreshedProduct || product;
-    const inventorySnapshot = serializeWarehouseVariantRow(
-      refreshedProduct,
-      trackingResult.savedInventory ||
-        buildMirroredInventoryRow({
-          product: refreshedProduct,
-          quantity: trackingResult.nextWarehouseQuantity,
-          scannedAt: nowIso,
-          movementType,
-          movementQuantity: quantity,
-          createdAt:
-            trackingResult.savedInventory?.created_at ||
-            refreshedProduct?.local_created_at ||
-            nowIso,
-          updatedAt: nowIso,
-        }),
-    );
-
-    await writeActivityLog({
-      userId: req.user?.id,
-      product: refreshedProduct,
-      movementType,
-      quantity,
-      storeId,
-      scanCode,
-      note,
-      nextWarehouseQuantity: trackingResult.nextWarehouseQuantity,
-      shopifyInventoryQuantity: toNumber(refreshedProduct?.shopify_inventory_quantity),
-      trackingMode: trackingResult.trackingMode,
-    });
-
-    emitRealtimeEvent({
-      type: "warehouse.updated",
-      source: "/api/warehouse/scan",
-      userIds: [String(req.user?.id || "").trim()].filter(Boolean),
-      storeIds: [storeId],
-      payload: {
-        resource: "warehouse",
-        context: "scanner",
-        sku: refreshedProduct.warehouse_code,
-        movement_type: movementType,
+      const nowIso = new Date().toISOString();
+      const trackingResult = await persistWarehouseTracking({
+        storeId,
+        userId: req.user?.id,
+        product,
+        movementType,
         quantity,
-      },
-    });
+        scanCode,
+        note,
+        nowIso,
+      });
+      const refreshedProduct = trackingResult.refreshedProduct || product;
+      const inventorySnapshot = serializeWarehouseVariantRow(
+        refreshedProduct,
+        trackingResult.savedInventory ||
+          buildMirroredInventoryRow({
+            product: refreshedProduct,
+            quantity: trackingResult.nextWarehouseQuantity,
+            scannedAt: nowIso,
+            movementType,
+            movementQuantity: quantity,
+            createdAt:
+              trackingResult.savedInventory?.created_at ||
+              refreshedProduct?.local_created_at ||
+              nowIso,
+            updatedAt: nowIso,
+          }),
+      );
 
-    res.status(201).json({
-      message:
-        movementType === "in"
-          ? `Stock increased for code ${refreshedProduct.warehouse_code}`
-          : `Stock decreased for code ${refreshedProduct.warehouse_code}`,
-      tracking_mode: trackingResult.trackingMode,
-      warehouse_tracking_saved: trackingResult.warehouseTrackingSaved,
-      product: serializeScanProduct(refreshedProduct),
-      inventory: inventorySnapshot,
-      scan: trackingResult.scanEvent,
-    });
-  } catch (error) {
-    console.error("Error applying warehouse scan:", error);
+      await writeActivityLog({
+        userId: req.user?.id,
+        product: refreshedProduct,
+        movementType,
+        quantity,
+        storeId,
+        scanCode,
+        note,
+        nextWarehouseQuantity: trackingResult.nextWarehouseQuantity,
+        shopifyInventoryQuantity: toNumber(
+          refreshedProduct?.shopify_inventory_quantity,
+        ),
+        trackingMode: trackingResult.trackingMode,
+      });
 
-    res.status(error.status || 500).json({
-      error: error.status ? error.message : "Failed to save warehouse scan",
-    });
-  }
-});
+      emitRealtimeEvent({
+        type: "warehouse.updated",
+        source: "/api/warehouse/scan",
+        userIds: [String(req.user?.id || "").trim()].filter(Boolean),
+        storeIds: [storeId],
+        payload: {
+          resource: "warehouse",
+          context: "scanner",
+          sku: refreshedProduct.warehouse_code,
+          movement_type: movementType,
+          quantity,
+        },
+      });
+
+      res.status(201).json({
+        message:
+          movementType === "in"
+            ? `Stock increased for code ${refreshedProduct.warehouse_code}`
+            : `Stock decreased for code ${refreshedProduct.warehouse_code}`,
+        tracking_mode: trackingResult.trackingMode,
+        warehouse_tracking_saved: trackingResult.warehouseTrackingSaved,
+        product: serializeScanProduct(refreshedProduct),
+        inventory: inventorySnapshot,
+        scan: trackingResult.scanEvent,
+      });
+    } catch (error) {
+      console.error("Error applying warehouse scan:", error);
+
+      res.status(error.status || 500).json({
+        error: error.status ? error.message : "Failed to save warehouse scan",
+      });
+    }
+  },
+);
 
 export default router;

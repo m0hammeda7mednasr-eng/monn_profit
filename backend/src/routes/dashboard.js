@@ -67,14 +67,9 @@ const DASHBOARD_PRODUCT_COUNT_SELECT = [
 ].join(",");
 const DASHBOARD_PRODUCT_COUNT_SELECTS = [
   DASHBOARD_PRODUCT_COUNT_SELECT,
-  [
-    "id",
-    "store_id",
-    "user_id",
-    "title",
-    "inventory_quantity",
-    "data",
-  ].join(","),
+  ["id", "store_id", "user_id", "title", "inventory_quantity", "data"].join(
+    ",",
+  ),
   ["id", "store_id", "user_id", "inventory_quantity", "data"].join(","),
   "id,store_id,user_id",
 ];
@@ -191,7 +186,6 @@ const DASHBOARD_PRODUCT_PROFITABILITY_SELECT = [
   "store_id",
   "user_id",
   "title",
-  "image_url",
   "shopify_id",
   "sku",
   "price",
@@ -215,7 +209,9 @@ const DASHBOARD_PRODUCT_PROFITABILITY_SELECTS = [
     "operation_cost",
     "shipping_cost",
   ].join(","),
-  ["id", "store_id", "user_id", "title", "shopify_id", "sku", "price"].join(","),
+  ["id", "store_id", "user_id", "title", "shopify_id", "sku", "price"].join(
+    ",",
+  ),
 ];
 const DASHBOARD_PRODUCT_FULFILLED_PROFIT_SELECTS = [
   [DASHBOARD_PRODUCT_PROFITABILITY_SELECT, "data"].join(","),
@@ -233,9 +229,16 @@ const DASHBOARD_PRODUCT_FULFILLED_PROFIT_SELECTS = [
     "shipping_cost",
     "data",
   ].join(","),
-  ["id", "store_id", "user_id", "title", "shopify_id", "sku", "price", "data"].join(
-    ",",
-  ),
+  [
+    "id",
+    "store_id",
+    "user_id",
+    "title",
+    "shopify_id",
+    "sku",
+    "price",
+    "data",
+  ].join(","),
 ];
 const DASHBOARD_ORDER_PROFITABILITY_SELECT = [
   "id",
@@ -262,9 +265,15 @@ const DASHBOARD_ORDER_PROFITABILITY_SELECTS = [
     "cancelled_at",
     "data",
   ].join(","),
-  ["id", "store_id", "user_id", "total_price", "status", "cancelled_at", "data"].join(
-    ",",
-  ),
+  [
+    "id",
+    "store_id",
+    "user_id",
+    "total_price",
+    "status",
+    "cancelled_at",
+    "data",
+  ].join(","),
 ];
 const DASHBOARD_ORDER_FULFILLED_PROFIT_SELECTS = [
   [DASHBOARD_ORDER_PROFITABILITY_SELECT, "fulfillment_status"].join(","),
@@ -280,13 +289,21 @@ const DASHBOARD_ORDER_FULFILLED_PROFIT_SELECTS = [
     "fulfillment_status",
     "data",
   ].join(","),
-  ["id", "store_id", "user_id", "total_price", "status", "fulfillment_status", "data"].join(
-    ",",
-  ),
+  [
+    "id",
+    "store_id",
+    "user_id",
+    "total_price",
+    "status",
+    "fulfillment_status",
+    "data",
+  ].join(","),
 ];
-const DASHBOARD_OPERATIONAL_COST_SELECT = ["product_id", "amount", "apply_to"].join(
-  ",",
-);
+const DASHBOARD_OPERATIONAL_COST_SELECT = [
+  "product_id",
+  "amount",
+  "apply_to",
+].join(",");
 const GROWTH_CENTER_DEFAULT_LOOKBACK_DAYS = 30;
 const GROWTH_CENTER_ORDERS_HISTORY_DAYS = 365;
 const GROWTH_CENTER_REORDER_TARGET_DAYS = 30;
@@ -340,7 +357,9 @@ const GROWTH_CENTER_PRODUCT_SELECTS = [
     "updated_at",
     "data",
   ].join(","),
-  ["id", "store_id", "user_id", "title", "inventory_quantity", "data"].join(","),
+  ["id", "store_id", "user_id", "title", "inventory_quantity", "data"].join(
+    ",",
+  ),
 ];
 const GROWTH_CENTER_ORDER_SELECT = [
   "id",
@@ -991,7 +1010,10 @@ const parseOrderData = (order) => {
 };
 
 const MOON_PROFIT_STATUS_TAG_PREFIXES = ["moon_profit_status:"];
-const MOON_PROFIT_STATUS_NOTE_ATTRIBUTE_NAMES = ["moon_profit_status", "status"];
+const MOON_PROFIT_STATUS_NOTE_ATTRIBUTE_NAMES = [
+  "moon_profit_status",
+  "status",
+];
 
 const parseTagList = (tagsValue) => {
   if (Array.isArray(tagsValue)) {
@@ -1386,7 +1408,11 @@ const getFreshestTimestamp = (...sources) => {
 };
 
 const getPriorityRank = (priority) => {
-  switch (String(priority || "").trim().toLowerCase()) {
+  switch (
+    String(priority || "")
+      .trim()
+      .toLowerCase()
+  ) {
     case "critical":
       return 0;
     case "high":
@@ -1411,7 +1437,10 @@ const getScoreStatus = (score) => {
   return "critical";
 };
 
-const buildGrowthCustomerProfiles = (orders = [], referenceDate = new Date()) => {
+const buildGrowthCustomerProfiles = (
+  orders = [],
+  referenceDate = new Date(),
+) => {
   const profileByCustomerKey = new Map();
 
   for (const order of orders || []) {
@@ -1433,7 +1462,10 @@ const buildGrowthCustomerProfiles = (orders = [], referenceDate = new Date()) =>
           "",
       ).trim(),
       email: String(
-        order?.customer_email || orderData?.customer?.email || orderData?.email || "",
+        order?.customer_email ||
+          orderData?.customer?.email ||
+          orderData?.email ||
+          "",
       )
         .trim()
         .toLowerCase(),
@@ -1456,10 +1488,17 @@ const buildGrowthCustomerProfiles = (orders = [], referenceDate = new Date()) =>
     }
 
     const orderTimestamp = parsedOrderDate?.getTime() || null;
-    const firstTimestamp = getParsedDate(existingProfile.first_order_at)?.getTime();
-    const lastTimestamp = getParsedDate(existingProfile.last_order_at)?.getTime();
+    const firstTimestamp = getParsedDate(
+      existingProfile.first_order_at,
+    )?.getTime();
+    const lastTimestamp = getParsedDate(
+      existingProfile.last_order_at,
+    )?.getTime();
 
-    if (orderTimestamp && (!firstTimestamp || orderTimestamp < firstTimestamp)) {
+    if (
+      orderTimestamp &&
+      (!firstTimestamp || orderTimestamp < firstTimestamp)
+    ) {
       existingProfile.first_order_at = parsedOrderDate.toISOString();
     }
 
@@ -1478,7 +1517,10 @@ const buildGrowthCustomerProfiles = (orders = [], referenceDate = new Date()) =>
 
     if (!existingProfile.email) {
       existingProfile.email = String(
-        order?.customer_email || orderData?.customer?.email || orderData?.email || "",
+        order?.customer_email ||
+          orderData?.customer?.email ||
+          orderData?.email ||
+          "",
       )
         .trim()
         .toLowerCase();
@@ -1496,7 +1538,10 @@ const buildGrowthCustomerProfiles = (orders = [], referenceDate = new Date()) =>
         profile.orders_count > 0
           ? roundMetric(profile.total_spent / profile.orders_count)
           : 0,
-      days_since_first_order: getDaysSince(profile.first_order_at, referenceDate),
+      days_since_first_order: getDaysSince(
+        profile.first_order_at,
+        referenceDate,
+      ),
       days_since_last_order: getDaysSince(profile.last_order_at, referenceDate),
     }))
     .sort((left, right) => right.total_spent - left.total_spent);
@@ -1512,10 +1557,7 @@ const getVipSpendThreshold = (profiles = []) => {
     return 0;
   }
 
-  const thresholdIndex = Math.max(
-    0,
-    Math.ceil(spendValues.length * 0.8) - 1,
-  );
+  const thresholdIndex = Math.max(0, Math.ceil(spendValues.length * 0.8) - 1);
   return spendValues[thresholdIndex] || 0;
 };
 
@@ -1569,11 +1611,13 @@ const buildGrowthRetentionSnapshot = (
   });
   const dormantCustomers = profiles.filter(
     (profile) =>
-      toNumber(profile?.days_since_last_order) > GROWTH_CENTER_DORMANT_WINDOW_DAYS,
+      toNumber(profile?.days_since_last_order) >
+      GROWTH_CENTER_DORMANT_WINDOW_DAYS,
   );
   const activeCustomers = profiles.filter(
     (profile) =>
-      toNumber(profile?.days_since_last_order) <= GROWTH_CENTER_REPEAT_ACTIVE_WINDOW_DAYS,
+      toNumber(profile?.days_since_last_order) <=
+      GROWTH_CENTER_REPEAT_ACTIVE_WINDOW_DAYS,
   );
 
   const buildSegmentRow = (id, title, rows, note, action, tone = "slate") => {
@@ -1588,7 +1632,9 @@ const buildGrowthRetentionSnapshot = (
       count: rows.length,
       revenue: roundMetric(revenue),
       share_of_customers:
-        profiles.length > 0 ? roundMetric((rows.length / profiles.length) * 100) : 0,
+        profiles.length > 0
+          ? roundMetric((rows.length / profiles.length) * 100)
+          : 0,
       note,
       action,
       tone,
@@ -1608,7 +1654,8 @@ const buildGrowthRetentionSnapshot = (
 
   const winBackCandidates = [...winBackReady, ...dormantCustomers]
     .sort((left, right) => {
-      const spendDiff = toNumber(right?.total_spent) - toNumber(left?.total_spent);
+      const spendDiff =
+        toNumber(right?.total_spent) - toNumber(left?.total_spent);
       if (spendDiff !== 0) {
         return spendDiff;
       }
@@ -1647,7 +1694,9 @@ const buildGrowthRetentionSnapshot = (
       repeat_customer_rate: repeatCustomerRate,
       vip_customer_count: vipCustomers.length,
       vip_revenue_share:
-        trackedRevenue > 0 ? roundMetric((vipRevenue / trackedRevenue) * 100) : 0,
+        trackedRevenue > 0
+          ? roundMetric((vipRevenue / trackedRevenue) * 100)
+          : 0,
       win_back_count: winBackReady.length,
       dormant_count: dormantCustomers.length,
       one_time_customer_count: profiles.filter(
@@ -1775,7 +1824,10 @@ const addSalesToAccumulators = ({
       }
 
       if (orderAgeInDays !== null && orderAgeInDays <= primaryWindowDays) {
-        const primaryAccumulator = getSalesAccumulator(salesPrimaryWindowByKey, key);
+        const primaryAccumulator = getSalesAccumulator(
+          salesPrimaryWindowByKey,
+          key,
+        );
         if (primaryAccumulator) {
           primaryAccumulator.sold_units += quantity;
           primaryAccumulator.revenue += revenue;
@@ -1822,26 +1874,25 @@ const addSalesToAccumulators = ({
 };
 
 const mergeSalesSnapshots = (...snapshots) =>
-  snapshots.reduce(
-    (merged, snapshot) => {
-      if (!snapshot) {
-        return merged;
-      }
-
-      merged.sold_units += toNumber(snapshot?.sold_units);
-      merged.revenue += toNumber(snapshot?.revenue);
-      merged.orders_count += toNumber(snapshot?.orders_count);
-
-      const currentLastSoldAt = getParsedDate(merged.last_sold_at)?.getTime() || 0;
-      const snapshotLastSoldAt = getParsedDate(snapshot?.last_sold_at)?.getTime() || 0;
-      if (snapshotLastSoldAt > currentLastSoldAt) {
-        merged.last_sold_at = snapshot.last_sold_at;
-      }
-
+  snapshots.reduce((merged, snapshot) => {
+    if (!snapshot) {
       return merged;
-    },
-    createSalesAccumulator(),
-  );
+    }
+
+    merged.sold_units += toNumber(snapshot?.sold_units);
+    merged.revenue += toNumber(snapshot?.revenue);
+    merged.orders_count += toNumber(snapshot?.orders_count);
+
+    const currentLastSoldAt =
+      getParsedDate(merged.last_sold_at)?.getTime() || 0;
+    const snapshotLastSoldAt =
+      getParsedDate(snapshot?.last_sold_at)?.getTime() || 0;
+    if (snapshotLastSoldAt > currentLastSoldAt) {
+      merged.last_sold_at = snapshot.last_sold_at;
+    }
+
+    return merged;
+  }, createSalesAccumulator());
 
 const readSalesSnapshotForProduct = (product, salesByKey) => {
   const directKeys = [product?.shopify_id, product?.id]
@@ -1918,7 +1969,10 @@ const buildGrowthProductMetrics = ({
 
   return dedupeRowsById(products).map((product) => {
     const suppressLowStockAlerts = isProductLowStockAlertsSuppressed(product);
-    const allTimeSnapshot = readSalesSnapshotForProduct(product, salesAllTimeByKey);
+    const allTimeSnapshot = readSalesSnapshotForProduct(
+      product,
+      salesAllTimeByKey,
+    );
     const primarySnapshot = readSalesSnapshotForProduct(
       product,
       salesPrimaryWindowByKey,
@@ -1927,7 +1981,10 @@ const buildGrowthProductMetrics = ({
       product,
       salesSecondaryWindowByKey,
     );
-    const inventoryQuantity = Math.max(0, toNumber(product?.inventory_quantity));
+    const inventoryQuantity = Math.max(
+      0,
+      toNumber(product?.inventory_quantity),
+    );
     const costPrice = toNumber(product?.cost_price);
     const adsCost = toNumber(product?.ads_cost);
     const operationCost = toNumber(product?.operation_cost);
@@ -1940,7 +1997,9 @@ const buildGrowthProductMetrics = ({
           ? secondarySnapshot.sold_units / secondaryWindowDays
           : 0;
     const daysOfCover =
-      primaryDailyVelocity > 0 ? inventoryQuantity / primaryDailyVelocity : null;
+      primaryDailyVelocity > 0
+        ? inventoryQuantity / primaryDailyVelocity
+        : null;
     const suggestedReorderUnits =
       primaryDailyVelocity > 0
         ? Math.max(
@@ -1951,7 +2010,8 @@ const buildGrowthProductMetrics = ({
             ),
           )
         : 0;
-    const recentProfit = primarySnapshot.revenue - totalUnitCost * primarySnapshot.sold_units;
+    const recentProfit =
+      primarySnapshot.revenue - totalUnitCost * primarySnapshot.sold_units;
     const recentMargin =
       primarySnapshot.revenue > 0
         ? (recentProfit / primarySnapshot.revenue) * 100
@@ -1979,7 +2039,6 @@ const buildGrowthProductMetrics = ({
       id: product?.id || null,
       route: product?.id ? `/products/${product.id}` : "/products",
       title: String(product?.title || "Untitled product").trim(),
-      image_url: product?.image_url || null,
       inventory_quantity: inventoryQuantity,
       cost_price: roundMetric(costPrice),
       total_unit_cost: roundMetric(totalUnitCost),
@@ -2001,14 +2060,16 @@ const buildGrowthProductMetrics = ({
       stock_status: stockStatus,
       suppress_low_stock_alerts: suppressLowStockAlerts,
       missing_saved_costs:
-        primarySnapshot.sold_units > 0 && (costPrice <= 0 || totalUnitCost <= 0),
+        primarySnapshot.sold_units > 0 &&
+        (costPrice <= 0 || totalUnitCost <= 0),
       has_margin_leak:
         primarySnapshot.revenue > 0 &&
         recentMargin < GROWTH_CENTER_LEAK_MARGIN_THRESHOLD,
       can_scale_now:
         primarySnapshot.sold_units >= 2 &&
         recentMargin >= GROWTH_CENTER_SCALE_MARGIN_THRESHOLD &&
-        inventoryQuantity >= Math.max(8, Math.ceil(primarySnapshot.sold_units * 1.4)) &&
+        inventoryQuantity >=
+          Math.max(8, Math.ceil(primarySnapshot.sold_units * 1.4)) &&
         (daysOfCover === null || daysOfCover >= 14),
       updated_at: getIsoStringOrNull(product?.updated_at),
     };
@@ -2105,10 +2166,12 @@ const buildGrowthProfitabilitySnapshot = (productMetrics = []) => {
     summary: {
       tracked_products: productMetrics.length,
       active_products: productsWithDemand.length,
-      scale_now_count: productsWithDemand.filter((product) => product?.can_scale_now)
-        .length,
-      margin_leak_count: productsWithDemand.filter((product) => product?.has_margin_leak)
-        .length,
+      scale_now_count: productsWithDemand.filter(
+        (product) => product?.can_scale_now,
+      ).length,
+      margin_leak_count: productsWithDemand.filter(
+        (product) => product?.has_margin_leak,
+      ).length,
       missing_cost_count: productsWithDemand.filter(
         (product) => product?.missing_saved_costs,
       ).length,
@@ -2119,19 +2182,22 @@ const buildGrowthProfitabilitySnapshot = (productMetrics = []) => {
     scale_now: productsWithDemand
       .filter((product) => product?.can_scale_now)
       .sort(
-        (left, right) => toNumber(right?.recent_profit) - toNumber(left?.recent_profit),
+        (left, right) =>
+          toNumber(right?.recent_profit) - toNumber(left?.recent_profit),
       )
       .slice(0, 5),
     margin_leaks: productsWithDemand
       .filter((product) => product?.has_margin_leak)
       .sort(
-        (left, right) => toNumber(right?.recent_revenue) - toNumber(left?.recent_revenue),
+        (left, right) =>
+          toNumber(right?.recent_revenue) - toNumber(left?.recent_revenue),
       )
       .slice(0, 5),
     missing_cost_products: productsWithDemand
       .filter((product) => product?.missing_saved_costs)
       .sort(
-        (left, right) => toNumber(right?.recent_revenue) - toNumber(left?.recent_revenue),
+        (left, right) =>
+          toNumber(right?.recent_revenue) - toNumber(left?.recent_revenue),
       )
       .slice(0, 5),
   };
@@ -2149,8 +2215,12 @@ const buildGrowthOrderSummary = (
     (sum, order) => sum + getOrderNetSalesAmount(order),
     0,
   );
-  const paidOrders = recentOrders.filter((order) => getOrderNetSalesAmount(order) > 0);
-  const cancelledOrders = recentOrders.filter((order) => isCancelledOrder(order));
+  const paidOrders = recentOrders.filter(
+    (order) => getOrderNetSalesAmount(order) > 0,
+  );
+  const cancelledOrders = recentOrders.filter((order) =>
+    isCancelledOrder(order),
+  );
   const refundedOrders = recentOrders.filter((order) => isRefundedOrder(order));
   const pendingOrders = recentOrders.filter((order) => isPendingOrder(order));
   const unfulfilledOrders = recentOrders.filter(
@@ -2195,7 +2265,8 @@ const buildGrowthHealthSnapshot = ({
   freshestActivityAt = null,
   referenceDate = new Date(),
 }) => {
-  const trackedProducts = productMetrics.length || dedupeRowsById(products).length;
+  const trackedProducts =
+    productMetrics.length || dedupeRowsById(products).length;
   const trackedCustomers = Math.max(
     toNumber(trackedCustomersCount),
     dedupeRowsById(customers).length,
@@ -2205,7 +2276,9 @@ const buildGrowthHealthSnapshot = ({
     (product) => toNumber(product?.total_unit_cost) > 0,
   ).length;
   const costCoverageRate =
-    trackedProducts > 0 ? roundMetric((costReadyProducts / trackedProducts) * 100) : 100;
+    trackedProducts > 0
+      ? roundMetric((costReadyProducts / trackedProducts) * 100)
+      : 100;
   const freshnessDays = getDaysSince(freshestActivityAt, referenceDate);
   const inventoryScore = clampNumber(
     100 -
@@ -2431,7 +2504,8 @@ const buildGrowthActions = ({
       id: "system-healthy",
       priority: "growth",
       title: "The current store loop is stable",
-      reason: "No major growth blockers were detected in stock, retention, or saved margin coverage.",
+      reason:
+        "No major growth blockers were detected in stock, retention, or saved margin coverage.",
       action:
         "Use the scale candidates and retention segments to push controlled growth.",
       route: "/dashboard",
@@ -2440,7 +2514,10 @@ const buildGrowthActions = ({
   }
 
   return actions
-    .sort((left, right) => getPriorityRank(left.priority) - getPriorityRank(right.priority))
+    .sort(
+      (left, right) =>
+        getPriorityRank(left.priority) - getPriorityRank(right.priority),
+    )
     .slice(0, 6);
 };
 
@@ -2734,7 +2811,10 @@ const getScopedRowsBatched = async (
     }
 
     profiler.incrementCounter(`${tableName}_batches`, 1);
-    profiler.incrementCounter(`${tableName}_rows`, Array.isArray(data) ? data.length : 0);
+    profiler.incrementCounter(
+      `${tableName}_rows`,
+      Array.isArray(data) ? data.length : 0,
+    );
 
     return {
       rows: data || [],
@@ -2785,7 +2865,11 @@ const getScopedRowsBatched = async (
 
           rows.push(...batch.rows);
 
-          if (Number.isFinite(maxRows) && maxRows > 0 && rows.length >= maxRows) {
+          if (
+            Number.isFinite(maxRows) &&
+            maxRows > 0 &&
+            rows.length >= maxRows
+          ) {
             return applyStoreFilter(
               dedupeRowsById(rows.slice(0, maxRows)),
               scopedStoreId,
@@ -2820,7 +2904,11 @@ const getScopedRowsBatched = async (
   return applyStoreFilter(dedupeRowsById(rows), scopedStoreId);
 };
 
-const getSingleScopedProduct = async (req, productId, selectCandidates = []) => {
+const getSingleScopedProduct = async (
+  req,
+  productId,
+  selectCandidates = [],
+) => {
   const requestedStoreId = getRequestedStoreId(req);
   let lastError = null;
 
@@ -2841,7 +2929,10 @@ const getSingleScopedProduct = async (req, productId, selectCandidates = []) => 
     );
 
     if (!error) {
-      const filteredRows = applyStoreFilter(data ? [data] : [], requestedStoreId);
+      const filteredRows = applyStoreFilter(
+        data ? [data] : [],
+        requestedStoreId,
+      );
       return filteredRows[0] || null;
     }
 
@@ -2917,10 +3008,9 @@ router.get("/stats", authenticateToken, async (req, res) => {
         allowUnorderedFallback: true,
         orderField: "updated_at",
         applyQuery: (query) =>
-          query.gt("inventory_quantity", 0).lt(
-            "inventory_quantity",
-            LOW_STOCK_THRESHOLD,
-          ),
+          query
+            .gt("inventory_quantity", 0)
+            .lt("inventory_quantity", LOW_STOCK_THRESHOLD),
       }),
       getScopedRowsBatched(req, Order, {
         selects: hasScopedOrderFilters
@@ -2941,7 +3031,8 @@ router.get("/stats", authenticateToken, async (req, res) => {
       lowStockProductsResult.status === "fulfilled"
         ? lowStockProductsResult.value
         : [];
-    const orders = ordersResult.status === "fulfilled" ? ordersResult.value : [];
+    const orders =
+      ordersResult.status === "fulfilled" ? ordersResult.value : [];
     const totalProducts =
       totalProductsResult.status === "fulfilled"
         ? Number(totalProductsResult.value || 0)
@@ -2960,7 +3051,10 @@ router.get("/stats", authenticateToken, async (req, res) => {
       dataGaps.push("low_stock_products");
     }
     if (ordersResult.status === "rejected") {
-      console.error("Dashboard orders stats query failed:", ordersResult.reason);
+      console.error(
+        "Dashboard orders stats query failed:",
+        ordersResult.reason,
+      );
       dataGaps.push("orders");
     }
     if (totalProductsResult.status === "rejected") {
@@ -2988,9 +3082,7 @@ router.get("/stats", authenticateToken, async (req, res) => {
         const filteredEntitySummary = hasScopedOrderFilters
           ? buildFilteredOrderEntitySummary(filteredOrders)
           : {
-              totalProducts: Number.isFinite(totalProducts)
-                ? totalProducts
-                : 0,
+              totalProducts: Number.isFinite(totalProducts) ? totalProducts : 0,
               totalCustomers: Number.isFinite(totalCustomers)
                 ? totalCustomers
                 : new Set(
@@ -3052,7 +3144,10 @@ router.get(
     const lookbackDays = normalizeGrowthLookbackDays(req.query?.days);
     const cacheKey = `${getDashboardCacheKey(req)}::growth-center::${lookbackDays}`;
     const profiler = getRequestProfiler();
-    const cachedEntry = getFreshCacheEntry(dashboardGrowthCenterCache, cacheKey);
+    const cachedEntry = getFreshCacheEntry(
+      dashboardGrowthCenterCache,
+      cacheKey,
+    );
     if (cachedEntry) {
       profiler.setMeta("dashboard.growth-center.cache", "hit");
       res.setHeader("X-Dashboard-Cache", "hit");
@@ -3098,7 +3193,10 @@ router.get(
       const payload = measureSync(
         "dashboard.growth-center.compute",
         () => {
-          const customerProfiles = buildGrowthCustomerProfiles(orders, referenceDate);
+          const customerProfiles = buildGrowthCustomerProfiles(
+            orders,
+            referenceDate,
+          );
           const retention = buildGrowthRetentionSnapshot(
             customerProfiles,
             referenceDate,
@@ -3109,8 +3207,10 @@ router.get(
             referenceDate,
             primaryWindowDays: lookbackDays,
           });
-          const replenishment = buildGrowthReplenishmentSnapshot(productMetrics);
-          const profitability = buildGrowthProfitabilitySnapshot(productMetrics);
+          const replenishment =
+            buildGrowthReplenishmentSnapshot(productMetrics);
+          const profitability =
+            buildGrowthProfitabilitySnapshot(productMetrics);
           const orderSummary = buildGrowthOrderSummary(
             orders,
             referenceDate,
@@ -3125,12 +3225,12 @@ router.get(
             orders.flatMap((order) => [order?.updated_at, order?.created_at]),
           );
           const health = buildGrowthHealthSnapshot({
-              products,
-              customers: recentCustomers,
-              trackedCustomersCount,
-              productMetrics,
-              replenishment,
-              retention,
+            products,
+            customers: recentCustomers,
+            trackedCustomersCount,
+            productMetrics,
+            replenishment,
+            retention,
             profitability,
             orderSummary,
             freshestActivityAt,
@@ -3150,7 +3250,9 @@ router.get(
               ...health.summary,
               recent_revenue: roundMetric(orderSummary.recent_revenue),
               active_customers: toNumber(retention?.summary?.active_customers),
-              scale_now_count: toNumber(profitability?.summary?.scale_now_count),
+              scale_now_count: toNumber(
+                profitability?.summary?.scale_now_count,
+              ),
               win_back_count: toNumber(retention?.summary?.win_back_count),
             },
             health_checks: health.health_checks,
@@ -3210,7 +3312,10 @@ router.get(
       const payload = measureSync(
         "dashboard.analytics.compute",
         () => {
-          const allOrders = filterOrdersByScope(orders || [], orderScopeFilters);
+          const allOrders = filterOrdersByScope(
+            orders || [],
+            orderScopeFilters,
+          );
           const paidOrders = allOrders.filter((order) => isPaidOrder(order));
           const refundedOrders = allOrders.filter((order) =>
             isRefundedOrder(order),
@@ -3354,16 +3459,17 @@ router.get(
               cancellationRate:
                 totalOrders > 0
                   ? parseFloat(
-                      (
-                        (ordersByStatus.cancelled / totalOrders) *
-                        100
-                      ).toFixed(2),
+                      ((ordersByStatus.cancelled / totalOrders) * 100).toFixed(
+                        2,
+                      ),
                     )
                   : 0,
               refundRate:
                 totalOrders > 0
                   ? parseFloat(
-                      ((ordersByStatus.refunded / totalOrders) * 100).toFixed(2),
+                      ((ordersByStatus.refunded / totalOrders) * 100).toFixed(
+                        2,
+                      ),
                     )
                   : 0,
             },

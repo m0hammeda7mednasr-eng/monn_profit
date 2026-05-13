@@ -48,8 +48,15 @@ const MOON_PROFIT_PAYMENT_NOTE_ATTRIBUTE_NAMES = [
   "moon_profit_pm",
 ];
 const MOON_PROFIT_STATUS_NOTE_ATTRIBUTE_NAMES = ["moon_profit_status"];
-const MOON_PROFIT_VOID_REASON_NOTE_ATTRIBUTE_NAMES = ["moon_profit_void_reason"];
-const VALID_PAYMENT_METHODS = new Set(["none", "shopify", "instapay", "wallet"]);
+const MOON_PROFIT_VOID_REASON_NOTE_ATTRIBUTE_NAMES = [
+  "moon_profit_void_reason",
+];
+const VALID_PAYMENT_METHODS = new Set([
+  "none",
+  "shopify",
+  "instapay",
+  "wallet",
+]);
 const VALID_ORDER_STATUSES = new Set([
   "pending",
   "authorized",
@@ -118,9 +125,9 @@ const parseOrderData = (order) => {
 const hasNonEmptyObject = (value) =>
   Boolean(
     value &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      Object.keys(value).length > 0,
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length > 0,
   );
 
 // Legacy/migrated rows can keep only summary fields in `data`, which breaks
@@ -150,9 +157,9 @@ const isOrderDetailsDataIncomplete = (order, orderData = {}) => {
 
   const hasOrderIdentity = Boolean(
     orderData?.id ||
-      orderData?.admin_graphql_api_id ||
-      orderData?.order_number ||
-      orderData?.name,
+    orderData?.admin_graphql_api_id ||
+    orderData?.order_number ||
+    orderData?.name,
   );
   if (!hasOrderIdentity) {
     return true;
@@ -178,11 +185,7 @@ const resolveOrderCustomerPhone = (orderData = {}, order = {}) =>
       "",
   ).trim();
 
-const hydrateOrderDetailsFromShopify = async ({
-  userId,
-  order,
-  orderData,
-}) => {
+const hydrateOrderDetailsFromShopify = async ({ userId, order, orderData }) => {
   if (!isOrderDetailsDataIncomplete(order, orderData)) {
     return { order, orderData };
   }
@@ -311,9 +314,7 @@ const normalizeFulfillmentStatus = (value) => {
 
 const parseTagList = (tagsValue) => {
   if (Array.isArray(tagsValue)) {
-    return tagsValue
-      .map((tag) => String(tag || "").trim())
-      .filter(Boolean);
+    return tagsValue.map((tag) => String(tag || "").trim()).filter(Boolean);
   }
 
   return String(tagsValue || "")
@@ -323,7 +324,11 @@ const parseTagList = (tagsValue) => {
 };
 
 const serializeTagList = (tags) =>
-  Array.from(new Set((tags || []).map((tag) => String(tag || "").trim()).filter(Boolean))).join(", ");
+  Array.from(
+    new Set(
+      (tags || []).map((tag) => String(tag || "").trim()).filter(Boolean),
+    ),
+  ).join(", ");
 
 const stripMoonProfitControlTags = (orderData) => {
   const existingTags = parseTagList(orderData?.tags);
@@ -380,7 +385,9 @@ const getNoteAttributeValue = (orderData, keys = []) => {
 };
 
 const extractPaymentMethodFromOrderData = (orderData) => {
-  const fromData = normalizePaymentMethod(orderData?.moon_profit_payment_method);
+  const fromData = normalizePaymentMethod(
+    orderData?.moon_profit_payment_method,
+  );
   if (fromData) {
     return fromData;
   }
@@ -416,7 +423,9 @@ const extractStatusFromOrderData = (orderData) => {
   }
 
   const tags = parseTagList(orderData?.tags);
-  return normalizeOrderStatus(extractTagValueByPrefixes(tags, [MOON_PROFIT_STATUS_TAG_PREFIX]));
+  return normalizeOrderStatus(
+    extractTagValueByPrefixes(tags, [MOON_PROFIT_STATUS_TAG_PREFIX]),
+  );
 };
 
 const extractVoidReasonFromOrderData = (orderData) => {
@@ -426,11 +435,17 @@ const extractVoidReasonFromOrderData = (orderData) => {
   }
 
   return String(
-    getNoteAttributeValue(orderData, MOON_PROFIT_VOID_REASON_NOTE_ATTRIBUTE_NAMES),
+    getNoteAttributeValue(
+      orderData,
+      MOON_PROFIT_VOID_REASON_NOTE_ATTRIBUTE_NAMES,
+    ),
   ).trim();
 };
 
-const mergeMoonProfitControlTags = (orderData, { status = "", paymentMethod = "" } = {}) => {
+const mergeMoonProfitControlTags = (
+  orderData,
+  { status = "", paymentMethod = "" } = {},
+) => {
   return stripMoonProfitControlTags(orderData);
 };
 
@@ -642,14 +657,16 @@ const buildRequestedLineItemQuantities = (
     }
 
     const availableQuantity =
-      parsePositiveQuantity(availableQuantitiesByLineItemId.get(lineItemId)) || 0;
+      parsePositiveQuantity(availableQuantitiesByLineItemId.get(lineItemId)) ||
+      0;
     if (availableQuantity <= 0) {
       throw new Error(
         `Line item ${lineItemId} has no ${actionLabel} quantity available`,
       );
     }
 
-    const requestedQuantity = parsePositiveQuantity(item?.quantity) || availableQuantity;
+    const requestedQuantity =
+      parsePositiveQuantity(item?.quantity) || availableQuantity;
     const existingRequested = requestedQuantities.get(lineItemId) || 0;
     const nextRequestedQuantity = existingRequested + requestedQuantity;
 
@@ -680,14 +697,20 @@ const getOrderOutstandingAmount = (order, orderData = {}) => {
   }
 
   const total = parseFloat(
-    orderData?.current_total_price || orderData?.total_price || order?.total_price || 0,
+    orderData?.current_total_price ||
+      orderData?.total_price ||
+      order?.total_price ||
+      0,
   );
   return Number.isFinite(total) && total > 0 ? total : 0;
 };
 
 const getRefundableAmount = (order, orderData = {}) => {
   const currentTotal = parseFloat(
-    orderData?.current_total_price || orderData?.total_price || order?.total_price || 0,
+    orderData?.current_total_price ||
+      orderData?.total_price ||
+      order?.total_price ||
+      0,
   );
   const refundedAmount = parseFloat(order?.total_refunded || 0);
   const refundable = currentTotal - refundedAmount;
@@ -731,11 +754,7 @@ const fetchShopifyFulfillmentOrders = async ({ tokenData, order }) => {
     : [];
 };
 
-const createShopifyFulfillment = async ({
-  tokenData,
-  order,
-  fulfillment,
-}) => {
+const createShopifyFulfillment = async ({ tokenData, order, fulfillment }) => {
   const response = await axios.post(
     `https://${tokenData.shop}/admin/api/${SHOPIFY_API_VERSION}/fulfillments.json`,
     { fulfillment },
@@ -747,10 +766,7 @@ const createShopifyFulfillment = async ({
   return response?.data || null;
 };
 
-const cancelShopifyFulfillment = async ({
-  tokenData,
-  fulfillmentId,
-}) => {
+const cancelShopifyFulfillment = async ({ tokenData, fulfillmentId }) => {
   const response = await axios.post(
     `https://${tokenData.shop}/admin/api/${SHOPIFY_API_VERSION}/fulfillments/${fulfillmentId}/cancel.json`,
     {},
@@ -824,11 +840,14 @@ const syncOrderMetadataToShopify = async ({
   voidReason = "",
 }) => {
   const orderData = parseOrderData(order);
-  const mirroredControlData = applyMoonProfitControlValuesToOrderData(orderData, {
-    status,
-    paymentMethod,
-    voidReason,
-  });
+  const mirroredControlData = applyMoonProfitControlValuesToOrderData(
+    orderData,
+    {
+      status,
+      paymentMethod,
+      voidReason,
+    },
+  );
 
   return await updateShopifyOrderNote({
     tokenData,
@@ -855,7 +874,9 @@ const updateShopifyOrderNote = async ({
   }
 
   const parsedOrderData = parseOrderData(order);
-  const existingNote = String(parsedOrderData?.note || order?.note || "").trim();
+  const existingNote = String(
+    parsedOrderData?.note || order?.note || "",
+  ).trim();
   const nextNote = appendLogLineToNote(existingNote, logLine);
   const numericShopifyId = getOrderNumericShopifyId(order);
 
@@ -894,16 +915,18 @@ export class OrderManagementService {
     const normalizedShopifyOrderId = String(order.shopify_id || "").trim();
 
     if (normalizedShopifyOrderId) {
-      const { error: insertError } = await supabase.from("order_comments").insert([
-        {
-          order_id: normalizedShopifyOrderId,
-          user_id: userId,
-          comment_text: commentText,
-          comment_type: "status_change",
-          is_internal: false,
-          is_pinned: true,
-        },
-      ]);
+      const { error: insertError } = await supabase
+        .from("order_comments")
+        .insert([
+          {
+            order_id: normalizedShopifyOrderId,
+            user_id: userId,
+            comment_text: commentText,
+            comment_type: "status_change",
+            is_internal: false,
+            is_pinned: true,
+          },
+        ]);
 
       if (!insertError) {
         return;
@@ -1028,8 +1051,6 @@ export class OrderManagementService {
         properties: item.properties || [],
         product_exists: item.product_exists,
         total_discount: item.total_discount,
-        image_url:
-          item.properties?.find((p) => p.name === "_image_url")?.value || null,
       }));
 
       // Extract COMPLETE shipping address from data
@@ -1148,7 +1169,8 @@ export class OrderManagementService {
         normalizedFinancialStatus === "paid" ||
         normalizedFinancialStatus === "partially_paid"
           ? "shopify"
-          : manualPaymentMethod === "instapay" || manualPaymentMethod === "wallet"
+          : manualPaymentMethod === "instapay" ||
+              manualPaymentMethod === "wallet"
             ? manualPaymentMethod
             : "none";
 
@@ -1400,9 +1422,11 @@ export class OrderManagementService {
 
       const shippingAddressChanged =
         JSON.stringify(currentShippingAddress) !==
-        JSON.stringify(getEditableShippingAddressFromOrderData({
-          shipping_address: nextShippingAddress,
-        }));
+        JSON.stringify(
+          getEditableShippingAddressFromOrderData({
+            shipping_address: nextShippingAddress,
+          }),
+        );
 
       if (
         nextCustomerPhone === currentCustomerPhone &&
@@ -1476,9 +1500,8 @@ export class OrderManagementService {
         old_customer_phone: currentCustomerPhone,
         new_customer_phone: persistedCustomerPhone,
         old_shipping_address: currentShippingAddress,
-        new_shipping_address: getEditableShippingAddressFromOrderData(
-          nextOrderData,
-        ),
+        new_shipping_address:
+          getEditableShippingAddressFromOrderData(nextOrderData),
       });
 
       return {
@@ -1605,12 +1628,17 @@ export class OrderManagementService {
         throw updateError;
       }
 
-      await this.logSyncOperation(userId, order.id, "order_shipping_issue_update", {
-        local_only: true,
-        old_shipping_issue: currentShippingIssue,
-        new_shipping_issue:
-          extractOrderLocalMetadata(nextOrderData)?.shipping_issue || null,
-      });
+      await this.logSyncOperation(
+        userId,
+        order.id,
+        "order_shipping_issue_update",
+        {
+          local_only: true,
+          old_shipping_issue: currentShippingIssue,
+          new_shipping_issue:
+            extractOrderLocalMetadata(nextOrderData)?.shipping_issue || null,
+        },
+      );
 
       return {
         success: true,
@@ -1752,8 +1780,12 @@ export class OrderManagementService {
         throw new Error("Shopify not connected");
       }
 
-      const noteContent = String(note?.content || "").replace(/\s+/g, " ").trim();
-      const noteAuthor = String(note?.author || "User").replace(/\s+/g, " ").trim();
+      const noteContent = String(note?.content || "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const noteAuthor = String(note?.author || "User")
+        .replace(/\s+/g, " ")
+        .trim();
       const noteLine = `[Moon Profit] Note by "${noteAuthor}" at ${new Date().toISOString()}: ${noteContent}`;
 
       const responseData = await updateShopifyOrderNote({
@@ -1795,7 +1827,12 @@ export class OrderManagementService {
         })
         .eq("id", orderId);
 
-      await this.updateSyncOperationStatus(userId, orderId, "success", responseData);
+      await this.updateSyncOperationStatus(
+        userId,
+        orderId,
+        "success",
+        responseData,
+      );
 
       return { success: true };
     } catch (error) {
@@ -1861,10 +1898,13 @@ export class OrderManagementService {
 
       const responseOrderPayload = getShopifyOrderPayload(responseData);
       const nextOrderData = preserveOrderLocalMetadata(
-        applyMoonProfitControlValuesToOrderData(responseOrderPayload || orderData, {
-          status: statusForMirror,
-          paymentMethod: methodValue,
-        }),
+        applyMoonProfitControlValuesToOrderData(
+          responseOrderPayload || orderData,
+          {
+            status: statusForMirror,
+            paymentMethod: methodValue,
+          },
+        ),
         order.data,
       );
 
@@ -1883,7 +1923,12 @@ export class OrderManagementService {
         })
         .eq("id", orderId);
 
-      await this.updateSyncOperationStatus(userId, orderId, "success", responseData);
+      await this.updateSyncOperationStatus(
+        userId,
+        orderId,
+        "success",
+        responseData,
+      );
       return { success: true };
     } catch (error) {
       console.error("Shopify payment method sync error:", error);
@@ -1948,7 +1993,8 @@ export class OrderManagementService {
       }
 
       const orderData = parseOrderData(order);
-      const paymentMethodForMirror = extractPaymentMethodFromOrderData(orderData);
+      const paymentMethodForMirror =
+        extractPaymentMethodFromOrderData(orderData);
       const statusLogLine = `[Moon Profit] Status changed to "${normalizedStatus}" at ${new Date().toISOString()}${options?.voidReason ? ` (Reason: ${options.voidReason})` : ""}`;
 
       let responseData = null;
@@ -2048,7 +2094,9 @@ export class OrderManagementService {
       } else if (normalizedStatus === "authorized") {
         const outstandingAmount = getOrderOutstandingAmount(order, orderData);
         if (outstandingAmount <= 0) {
-          throw new Error("This order does not have any outstanding amount to authorize");
+          throw new Error(
+            "This order does not have any outstanding amount to authorize",
+          );
         }
 
         const preferredGateway = String(
@@ -2076,7 +2124,9 @@ export class OrderManagementService {
       } else if (normalizedStatus === "refunded") {
         const refundableAmount = getRefundableAmount(order, orderData);
         if (refundableAmount <= 0) {
-          throw new Error("This order does not have any refundable amount left");
+          throw new Error(
+            "This order does not have any refundable amount left",
+          );
         }
 
         const transactions = await fetchShopifyOrderTransactions({
@@ -2085,7 +2135,9 @@ export class OrderManagementService {
         });
         const referenceTransaction = pickReferenceTransaction(transactions);
         if (!referenceTransaction?.id) {
-          throw new Error("No captured or sale transaction was found to refund");
+          throw new Error(
+            "No captured or sale transaction was found to refund",
+          );
         }
 
         await createShopifyOrderTransaction({
@@ -2096,7 +2148,8 @@ export class OrderManagementService {
             parent_id: referenceTransaction.id,
             amount: toMoneyString(refundableAmount),
             currency: getOrderCurrency(order, orderData),
-            gateway: String(referenceTransaction.gateway || "").trim() || undefined,
+            gateway:
+              String(referenceTransaction.gateway || "").trim() || undefined,
           },
         });
 
@@ -2119,7 +2172,10 @@ export class OrderManagementService {
 
       let responseOrderPayload = getShopifyOrderPayload(responseData);
       if (!responseOrderPayload) {
-        responseOrderPayload = await fetchShopifyOrderById({ tokenData, order });
+        responseOrderPayload = await fetchShopifyOrderById({
+          tokenData,
+          order,
+        });
       }
 
       const resolvedStatus =
@@ -2127,11 +2183,14 @@ export class OrderManagementService {
         extractStatusFromOrderData(responseOrderPayload) ||
         normalizedStatus;
       const nextOrderData = preserveOrderLocalMetadata(
-        applyMoonProfitControlValuesToOrderData(responseOrderPayload || orderData, {
-          status: resolvedStatus,
-          paymentMethod: paymentMethodForMirror,
-          voidReason: options?.voidReason,
-        }),
+        applyMoonProfitControlValuesToOrderData(
+          responseOrderPayload || orderData,
+          {
+            status: resolvedStatus,
+            paymentMethod: paymentMethodForMirror,
+            voidReason: options?.voidReason,
+          },
+        ),
         order.data,
       );
 
@@ -2151,7 +2210,12 @@ export class OrderManagementService {
         })
         .eq("id", orderId);
 
-      await this.updateSyncOperationStatus(userId, orderId, "success", responseData);
+      await this.updateSyncOperationStatus(
+        userId,
+        orderId,
+        "success",
+        responseData,
+      );
 
       return { success: true };
     } catch (error) {
@@ -2195,9 +2259,8 @@ export class OrderManagementService {
         throw new Error("Shopify not connected");
       }
 
-      const normalizedRequestedStatus = normalizeFulfillmentStatus(
-        requestedStatus,
-      );
+      const normalizedRequestedStatus =
+        normalizeFulfillmentStatus(requestedStatus);
       if (!VALID_FULFILLMENT_ACTIONS.has(normalizedRequestedStatus)) {
         throw new Error("Invalid fulfillment status");
       }
@@ -2214,19 +2277,25 @@ export class OrderManagementService {
         ? options.lineItems
         : [];
 
-      await this.logSyncOperation(userId, orderId, "update_fulfillment_status", {
-        fulfillment_status: normalizedRequestedStatus,
-        line_items: selectedLineItems,
-      });
+      await this.logSyncOperation(
+        userId,
+        orderId,
+        "update_fulfillment_status",
+        {
+          fulfillment_status: normalizedRequestedStatus,
+          line_items: selectedLineItems,
+        },
+      );
 
       let responseData = null;
 
       if (normalizedRequestedStatus === "fulfilled") {
-        const requestedQuantitiesByLineItemId = buildRequestedLineItemQuantities(
-          buildOrderFulfillableQuantityByLineItemId(order),
-          selectedLineItems,
-          "fulfillable",
-        );
+        const requestedQuantitiesByLineItemId =
+          buildRequestedLineItemQuantities(
+            buildOrderFulfillableQuantityByLineItemId(order),
+            selectedLineItems,
+            "fulfillable",
+          );
         const fulfillmentOrders = await fetchShopifyFulfillmentOrders({
           tokenData,
           order,
@@ -2250,7 +2319,10 @@ export class OrderManagementService {
                   10,
                 );
 
-                if (!Number.isFinite(remainingQuantity) || remainingQuantity <= 0) {
+                if (
+                  !Number.isFinite(remainingQuantity) ||
+                  remainingQuantity <= 0
+                ) {
                   return null;
                 }
 
@@ -2299,7 +2371,9 @@ export class OrderManagementService {
         if (lineItemsByFulfillmentOrder.length === 0) {
           const remainingQuantity = getFulfillableQuantity(order);
           if (remainingQuantity <= 0) {
-            throw new Error("This order has no fulfillable items left on Shopify");
+            throw new Error(
+              "This order has no fulfillable items left on Shopify",
+            );
           }
           throw new Error(
             "Shopify did not return any open fulfillment orders for this order",
@@ -2331,18 +2405,23 @@ export class OrderManagementService {
         );
 
         if (fulfillments.length === 0) {
-          throw new Error("This order does not have any Shopify fulfillment to cancel");
+          throw new Error(
+            "This order does not have any Shopify fulfillment to cancel",
+          );
         }
 
-        const requestedQuantitiesByLineItemId = buildRequestedLineItemQuantities(
-          buildOrderFulfilledQuantityByLineItemId(order),
-          selectedLineItems,
-          "fulfilled",
-        );
+        const requestedQuantitiesByLineItemId =
+          buildRequestedLineItemQuantities(
+            buildOrderFulfilledQuantityByLineItemId(order),
+            selectedLineItems,
+            "fulfilled",
+          );
         let fulfillmentsToCancel = fulfillments;
 
         if (requestedQuantitiesByLineItemId) {
-          const remainingRequestedQuantities = new Map(requestedQuantitiesByLineItemId);
+          const remainingRequestedQuantities = new Map(
+            requestedQuantitiesByLineItemId,
+          );
 
           fulfillmentsToCancel = fulfillments.filter((fulfillment) => {
             const lineItems = Array.isArray(fulfillment?.line_items)
@@ -2359,8 +2438,7 @@ export class OrderManagementService {
                 quantity: parsePositiveQuantity(lineItem?.quantity),
               }))
               .filter(
-                (lineItem) =>
-                  lineItem.lineItemId && lineItem.quantity > 0,
+                (lineItem) => lineItem.lineItemId && lineItem.quantity > 0,
               );
 
             if (normalizedLineItems.length === 0) {
@@ -2369,8 +2447,9 @@ export class OrderManagementService {
 
             const canCancelFulfillment = normalizedLineItems.every(
               ({ lineItemId, quantity }) =>
-                parsePositiveQuantity(remainingRequestedQuantities.get(lineItemId)) >=
-                quantity,
+                parsePositiveQuantity(
+                  remainingRequestedQuantities.get(lineItemId),
+                ) >= quantity,
             );
 
             if (!canCancelFulfillment) {
@@ -2441,7 +2520,12 @@ export class OrderManagementService {
         })
         .eq("id", orderId);
 
-      await this.updateSyncOperationStatus(userId, orderId, "success", responseData);
+      await this.updateSyncOperationStatus(
+        userId,
+        orderId,
+        "success",
+        responseData,
+      );
 
       return {
         success: true,

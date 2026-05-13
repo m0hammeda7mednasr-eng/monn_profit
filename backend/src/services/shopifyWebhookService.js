@@ -21,8 +21,16 @@ const MOON_PROFIT_PAYMENT_NOTE_ATTRIBUTE_PARSE_NAMES = [
   "payment_method",
 ];
 const MOON_PROFIT_STATUS_NOTE_ATTRIBUTE_NAMES = ["moon_profit_status"];
-const MOON_PROFIT_STATUS_NOTE_ATTRIBUTE_PARSE_NAMES = ["moon_profit_status", "status"];
-const VALID_PAYMENT_METHODS = new Set(["none", "shopify", "instapay", "wallet"]);
+const MOON_PROFIT_STATUS_NOTE_ATTRIBUTE_PARSE_NAMES = [
+  "moon_profit_status",
+  "status",
+];
+const VALID_PAYMENT_METHODS = new Set([
+  "none",
+  "shopify",
+  "instapay",
+  "wallet",
+]);
 const VALID_ORDER_STATUSES = new Set([
   "pending",
   "authorized",
@@ -48,7 +56,9 @@ export const MANAGED_WEBHOOK_TOPICS = [
 ];
 
 const normalizeShopDomain = (value) =>
-  String(value || "").trim().toLowerCase();
+  String(value || "")
+    .trim()
+    .toLowerCase();
 
 const normalizeBaseUrl = (value) =>
   String(value || "")
@@ -101,9 +111,7 @@ const normalizeOrderStatus = (value) => {
 
 const parseTagList = (tagsValue) => {
   if (Array.isArray(tagsValue)) {
-    return tagsValue
-      .map((tag) => String(tag || "").trim())
-      .filter(Boolean);
+    return tagsValue.map((tag) => String(tag || "").trim()).filter(Boolean);
   }
 
   return String(tagsValue || "")
@@ -113,7 +121,11 @@ const parseTagList = (tagsValue) => {
 };
 
 const serializeTagList = (tags) =>
-  Array.from(new Set((tags || []).map((tag) => String(tag || "").trim()).filter(Boolean))).join(", ");
+  Array.from(
+    new Set(
+      (tags || []).map((tag) => String(tag || "").trim()).filter(Boolean),
+    ),
+  ).join(", ");
 
 const stripMoonProfitControlTags = (orderPayload) => {
   const existingTags = parseTagList(orderPayload?.tags);
@@ -172,7 +184,9 @@ const getNoteAttributeValue = (orderPayload, keys = []) => {
 };
 
 const extractPaymentMethodFromOrderPayload = (orderPayload = {}) => {
-  const fromData = normalizePaymentMethod(orderPayload?.moon_profit_payment_method);
+  const fromData = normalizePaymentMethod(
+    orderPayload?.moon_profit_payment_method,
+  );
   if (fromData) {
     return fromData;
   }
@@ -199,7 +213,10 @@ const extractStatusFromOrderPayload = (orderPayload = {}) => {
   }
 
   const fromAttributes = normalizeOrderStatus(
-    getNoteAttributeValue(orderPayload, MOON_PROFIT_STATUS_NOTE_ATTRIBUTE_PARSE_NAMES),
+    getNoteAttributeValue(
+      orderPayload,
+      MOON_PROFIT_STATUS_NOTE_ATTRIBUTE_PARSE_NAMES,
+    ),
   );
   if (fromAttributes) {
     return fromAttributes;
@@ -211,7 +228,10 @@ const extractStatusFromOrderPayload = (orderPayload = {}) => {
   );
 };
 
-const mergeMoonProfitControlTags = (orderPayload, { status = "", paymentMethod = "" } = {}) => {
+const mergeMoonProfitControlTags = (
+  orderPayload,
+  { status = "", paymentMethod = "" } = {},
+) => {
   return stripMoonProfitControlTags(orderPayload);
 };
 
@@ -320,7 +340,6 @@ const mapProductFromShopify = (product = {}) => {
     description: product.body_html || "",
     vendor: product.vendor || "",
     product_type: product.product_type || "",
-    image_url: product.image?.src || "",
     price: parseNumeric(firstVariant.price),
     cost_price: parseNumeric(costPrice),
     currency: "USD",
@@ -340,9 +359,12 @@ const mapOrderFromShopify = (order = {}) => {
   const customerName =
     `${order.customer?.first_name || ""} ${order.customer?.last_name || ""}`.trim();
   const lineItems = Array.isArray(order.line_items) ? order.line_items : [];
-  const normalizedFinancialStatus = normalizeOrderStatus(order.financial_status);
+  const normalizedFinancialStatus = normalizeOrderStatus(
+    order.financial_status,
+  );
   const mirroredStatus = extractStatusFromOrderPayload(order);
-  const resolvedStatus = mirroredStatus || normalizedFinancialStatus || "pending";
+  const resolvedStatus =
+    mirroredStatus || normalizedFinancialStatus || "pending";
   const isShopifyPaidOrder =
     normalizedFinancialStatus === "paid" ||
     normalizedFinancialStatus === "partially_paid";
@@ -365,7 +387,8 @@ const mapOrderFromShopify = (order = {}) => {
   };
 
   if (resolvedManualPaymentMethod !== "none") {
-    normalizedOrderPayload.moon_profit_payment_method = resolvedManualPaymentMethod;
+    normalizedOrderPayload.moon_profit_payment_method =
+      resolvedManualPaymentMethod;
   } else {
     delete normalizedOrderPayload.moon_profit_payment_method;
   }
@@ -615,9 +638,13 @@ export const ensureWebhooksRegistered = async ({
       continue;
     }
 
-    await axios.post(getWebhooksUrl(shop), buildWebhookBody(topic, webhookAddress), {
-      headers: getShopifyHeaders(accessToken),
-    });
+    await axios.post(
+      getWebhooksUrl(shop),
+      buildWebhookBody(topic, webhookAddress),
+      {
+        headers: getShopifyHeaders(accessToken),
+      },
+    );
     created += 1;
   }
 
@@ -634,7 +661,9 @@ export const removeManagedWebhooks = async ({
   }
 
   const existing = await listWebhooks({ shop, accessToken });
-  const managedTopics = new Set(MANAGED_WEBHOOK_TOPICS.map((topic) => topic.toLowerCase()));
+  const managedTopics = new Set(
+    MANAGED_WEBHOOK_TOPICS.map((topic) => topic.toLowerCase()),
+  );
 
   const toDelete = existing.filter((webhook) => {
     const topic = String(webhook.topic || "").toLowerCase();
@@ -705,7 +734,9 @@ export const verifyWebhookHmac = (rawBody, receivedHmac, secret) => {
 };
 
 export const handleShopifyWebhook = async ({ topic, shopDomain, payload }) => {
-  const normalizedTopic = String(topic || "").trim().toLowerCase();
+  const normalizedTopic = String(topic || "")
+    .trim()
+    .toLowerCase();
   const normalizedShop = normalizeShopDomain(shopDomain);
 
   if (!normalizedTopic || !normalizedShop || !payload) {
@@ -774,5 +805,9 @@ export const handleShopifyWebhook = async ({ topic, shopDomain, payload }) => {
     };
   }
 
-  return { handled: false, reason: "unsupported_topic", topic: normalizedTopic };
+  return {
+    handled: false,
+    reason: "unsupported_topic",
+    topic: normalizedTopic,
+  };
 };

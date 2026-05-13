@@ -107,7 +107,8 @@ const ORDERS_SELECTS = [
     "data",
   ].join(","),
 ];
-const TASKS_SELECT = "id,title,description,status,due_date,created_at,updated_at";
+const TASKS_SELECT =
+  "id,title,description,status,due_date,created_at,updated_at";
 
 const analyticsCache = new Map();
 
@@ -250,7 +251,9 @@ const getRequestedStoreId = (req) => {
 };
 
 const resolveIsAdmin = (req) =>
-  Boolean(req.user?.isAdmin || String(req.user?.role || "").toLowerCase() === "admin");
+  Boolean(
+    req.user?.isAdmin || String(req.user?.role || "").toLowerCase() === "admin",
+  );
 
 const getAdminStoreIds = async () => {
   const strategies = [
@@ -320,7 +323,10 @@ const resolveStoreContext = async (req) => {
       throw createHttpError(400, "No connected store is available yet");
     }
 
-    throw createHttpError(400, "Select a store first before opening product analysis");
+    throw createHttpError(
+      400,
+      "Select a store first before opening product analysis",
+    );
   }
 
   const accessibleStoreIds = await getAccessibleStoreIds(req.user?.id);
@@ -350,7 +356,10 @@ const resolveStoreContext = async (req) => {
     throw createHttpError(400, "No store is connected to this account yet");
   }
 
-  throw createHttpError(400, "Select a store first before opening product analysis");
+  throw createHttpError(
+    400,
+    "Select a store first before opening product analysis",
+  );
 };
 
 const getProductVariants = (product) => {
@@ -395,14 +404,17 @@ const buildRefundDetails = (order) => {
   const latestAtByLineItemId = new Map();
 
   for (const refund of refunds) {
-    const refundAt = refund?.created_at || order?.updated_at || order?.created_at || null;
+    const refundAt =
+      refund?.created_at || order?.updated_at || order?.created_at || null;
     const refundLineItems = Array.isArray(refund?.refund_line_items)
       ? refund.refund_line_items
       : [];
 
     for (const entry of refundLineItems) {
       const lineItemId = normalizeKey(
-        entry?.line_item_id || entry?.line_item?.id || entry?.line_item?.line_item_id,
+        entry?.line_item_id ||
+          entry?.line_item?.id ||
+          entry?.line_item?.line_item_id,
       );
       if (!lineItemId) {
         continue;
@@ -410,7 +422,8 @@ const buildRefundDetails = (order) => {
 
       quantityByLineItemId.set(
         lineItemId,
-        toNumber(quantityByLineItemId.get(lineItemId)) + toNumber(entry?.quantity),
+        toNumber(quantityByLineItemId.get(lineItemId)) +
+          toNumber(entry?.quantity),
       );
       amountByLineItemId.set(
         lineItemId,
@@ -423,7 +436,10 @@ const buildRefundDetails = (order) => {
 
       if (refundAt) {
         const previous = latestAtByLineItemId.get(lineItemId);
-        if (!previous || new Date(refundAt).getTime() > new Date(previous).getTime()) {
+        if (
+          !previous ||
+          new Date(refundAt).getTime() > new Date(previous).getTime()
+        ) {
           latestAtByLineItemId.set(lineItemId, refundAt);
         }
       }
@@ -436,20 +452,26 @@ const buildRefundDetails = (order) => {
     latestAtByLineItemId,
     isFullyRefunded:
       isRestockedOrder(order) ||
-      getOrderGrossAmount(order) > 0 &&
-      getOrderRefundedAmount(order) >= getOrderGrossAmount(order),
+      (getOrderGrossAmount(order) > 0 &&
+        getOrderRefundedAmount(order) >= getOrderGrossAmount(order)),
   };
 };
 
 const buildFulfillmentDetails = (order) => {
   const data = parseOrderData(order);
-  const fulfillments = Array.isArray(data?.fulfillments) ? data.fulfillments : [];
+  const fulfillments = Array.isArray(data?.fulfillments)
+    ? data.fulfillments
+    : [];
   const quantityByLineItemId = new Map();
   const latestAtByLineItemId = new Map();
 
   for (const fulfillment of fulfillments) {
     const fulfillmentAt =
-      fulfillment?.created_at || fulfillment?.updated_at || order?.updated_at || order?.created_at || null;
+      fulfillment?.created_at ||
+      fulfillment?.updated_at ||
+      order?.updated_at ||
+      order?.created_at ||
+      null;
     const lineItems = Array.isArray(fulfillment?.line_items)
       ? fulfillment.line_items
       : [];
@@ -464,12 +486,16 @@ const buildFulfillmentDetails = (order) => {
 
       quantityByLineItemId.set(
         lineItemId,
-        toNumber(quantityByLineItemId.get(lineItemId)) + toNumber(item?.quantity),
+        toNumber(quantityByLineItemId.get(lineItemId)) +
+          toNumber(item?.quantity),
       );
 
       if (fulfillmentAt) {
         const previous = latestAtByLineItemId.get(lineItemId);
-        if (!previous || new Date(fulfillmentAt).getTime() > new Date(previous).getTime()) {
+        if (
+          !previous ||
+          new Date(fulfillmentAt).getTime() > new Date(previous).getTime()
+        ) {
           latestAtByLineItemId.set(lineItemId, fulfillmentAt);
         }
       }
@@ -583,7 +609,8 @@ const createVariantAnalyticsRecord = (product, variant) => ({
 
 const createProductAnalyticsRecord = (product) => {
   const variants = getProductVariants(product);
-  const normalizedVariants = variants.length > 0 ? variants : [buildSyntheticVariant(product)];
+  const normalizedVariants =
+    variants.length > 0 ? variants : [buildSyntheticVariant(product)];
   const variantRows = normalizedVariants.map((variant) =>
     createVariantAnalyticsRecord(product, variant),
   );
@@ -601,10 +628,11 @@ const createProductAnalyticsRecord = (product) => {
     sku: primarySku,
     price: product?.price ?? null,
     inventory_quantity:
-      variantRows.reduce((sum, variant) => sum + toNumber(variant.inventory_quantity), 0) ||
-      toNumber(product?.inventory_quantity),
+      variantRows.reduce(
+        (sum, variant) => sum + toNumber(variant.inventory_quantity),
+        0,
+      ) || toNumber(product?.inventory_quantity),
     variants_count: variantRows.length,
-    image_url: getProductImageUrl(product),
     last_synced_at: product?.last_synced_at || null,
     created_at: product?.created_at || null,
     updated_at: product?.updated_at || null,
@@ -631,7 +659,10 @@ const updateLatestTimestamp = (entry, fieldName, candidate) => {
   }
 
   const previous = entry[fieldName];
-  if (!previous || new Date(candidate).getTime() > new Date(previous).getTime()) {
+  if (
+    !previous ||
+    new Date(candidate).getTime() > new Date(previous).getTime()
+  ) {
     entry[fieldName] = candidate;
   }
 };
@@ -646,9 +677,7 @@ const getLineItemVariantTitleCandidates = (item = {}) => {
   }
 
   const compositeName = String(item?.name || "").trim();
-  const productTitle = String(
-    item?.title || item?.product_title || "",
-  ).trim();
+  const productTitle = String(item?.title || item?.product_title || "").trim();
   if (compositeName && productTitle && compositeName.startsWith(productTitle)) {
     const suffix = compositeName
       .slice(productTitle.length)
@@ -663,12 +692,18 @@ const getLineItemVariantTitleCandidates = (item = {}) => {
   return Array.from(candidates);
 };
 
-const resolveVariantEntryForProduct = (productEntry, item, matchedVariantEntry) => {
+const resolveVariantEntryForProduct = (
+  productEntry,
+  item,
+  matchedVariantEntry,
+) => {
   if (matchedVariantEntry) {
     return matchedVariantEntry;
   }
 
-  const variants = Array.isArray(productEntry?.variants) ? productEntry.variants : [];
+  const variants = Array.isArray(productEntry?.variants)
+    ? productEntry.variants
+    : [];
   if (variants.length === 0) {
     return null;
   }
@@ -709,7 +744,9 @@ const resolveVariantEntryForProduct = (productEntry, item, matchedVariantEntry) 
 };
 
 const getTaskStatusKey = (status) => {
-  const normalized = String(status || "").trim().toLowerCase();
+  const normalized = String(status || "")
+    .trim()
+    .toLowerCase();
   if (normalized === "completed") {
     return "completedTaskIds";
   }
@@ -775,7 +812,9 @@ const countRelevantVariants = (variants = []) => {
     return 0;
   }
 
-  const activeCount = rows.filter((variant) => hasVariantResult(variant)).length;
+  const activeCount = rows.filter((variant) =>
+    hasVariantResult(variant),
+  ).length;
   return activeCount > 0 ? activeCount : rows.length;
 };
 
@@ -917,7 +956,10 @@ const loadScopedOrders = async (storeId, rawOrderFilters = {}) => {
     0,
     parseInt(normalizedOrderFilters.ordersLimit, 10) || 0,
   );
-  const fromIso = parseScopeDateBoundary(normalizedOrderFilters.dateFrom, false);
+  const fromIso = parseScopeDateBoundary(
+    normalizedOrderFilters.dateFrom,
+    false,
+  );
   const toIso = parseScopeDateBoundary(normalizedOrderFilters.dateTo, true);
 
   return loadScopedRowsWithFallback({
@@ -953,7 +995,12 @@ const loadScopedTasks = async (req, storeId) => {
   }
 
   if (!resolveIsAdmin(req)) {
-    query = applyUserFilter(query, req.user?.id, req.user?.role || "user", "tasks");
+    query = applyUserFilter(
+      query,
+      req.user?.id,
+      req.user?.role || "user",
+      "tasks",
+    );
   }
 
   const { data, error } = await query;
@@ -1056,8 +1103,7 @@ const buildOrderLineEntries = (order, refundDetails, fulfillmentDetails) => {
     Math.min(
       effectiveRefundedAmount,
       lineContexts.reduce((sum, line) => sum + line.grossSales, 0),
-    ) -
-      explicitRefundAmountTotal,
+    ) - explicitRefundAmountTotal,
   );
 
   for (const lineContext of lineContexts) {
@@ -1066,7 +1112,9 @@ const buildOrderLineEntries = (order, refundDetails, fulfillmentDetails) => {
       lineContext.grossSales - lineContext.explicitRefundAmount,
     );
     const proportionalRefundAmount =
-      remainingRefundAmount > 0 && refundableBaseTotal > 0 && allocatableBase > 0
+      remainingRefundAmount > 0 &&
+      refundableBaseTotal > 0 &&
+      allocatableBase > 0
         ? (remainingRefundAmount * allocatableBase) / refundableBaseTotal
         : 0;
 
@@ -1083,7 +1131,11 @@ const buildOrderLineEntries = (order, refundDetails, fulfillmentDetails) => {
   return lineContexts;
 };
 
-export const buildAnalyticsPayload = async (req, storeId, rawOrderFilters = {}) => {
+export const buildAnalyticsPayload = async (
+  req,
+  storeId,
+  rawOrderFilters = {},
+) => {
   const normalizedOrderFilters = normalizeOrderScopeFilters(rawOrderFilters);
   const [products, orders] = await Promise.all([
     loadScopedProducts(storeId),
@@ -1094,7 +1146,10 @@ export const buildAnalyticsPayload = async (req, storeId, rawOrderFilters = {}) 
     ...normalizedOrderFilters,
     ordersLimit: "",
   });
-  const filteredOrders = filterOrdersByScope(ordersInScope, normalizedOrderFilters);
+  const filteredOrders = filterOrdersByScope(
+    ordersInScope,
+    normalizedOrderFilters,
+  );
 
   let tasks = [];
   let taskMetricsAvailable = true;
@@ -1119,7 +1174,11 @@ export const buildAnalyticsPayload = async (req, storeId, rawOrderFilters = {}) 
   const variantToProductBySku = new Map();
 
   for (const productEntry of productEntries) {
-    rememberIdentifier(productByShopifyId, productEntry.shopify_id, productEntry);
+    rememberIdentifier(
+      productByShopifyId,
+      productEntry.shopify_id,
+      productEntry,
+    );
     rememberIdentifier(productByShopifyId, productEntry.id, productEntry);
     rememberSku(productBySku, productEntry.sku, productEntry);
 
@@ -1136,7 +1195,11 @@ export const buildAnalyticsPayload = async (req, storeId, rawOrderFilters = {}) 
     const orderFinancialStatus = getOrderFinancialStatus(order);
     const refundDetails = buildRefundDetails(order);
     const fulfillmentDetails = buildFulfillmentDetails(order);
-    const lineEntries = buildOrderLineEntries(order, refundDetails, fulfillmentDetails);
+    const lineEntries = buildOrderLineEntries(
+      order,
+      refundDetails,
+      fulfillmentDetails,
+    );
 
     for (const lineEntry of lineEntries) {
       const {
@@ -1229,9 +1292,10 @@ export const buildAnalyticsPayload = async (req, storeId, rawOrderFilters = {}) 
 
   if (taskMetricsAvailable && tasks.length > 0) {
     for (const task of tasks) {
-      const searchableText = `${String(task?.title || "")} ${String(task?.description || "")}`
-        .toLowerCase()
-        .trim();
+      const searchableText =
+        `${String(task?.title || "")} ${String(task?.description || "")}`
+          .toLowerCase()
+          .trim();
       if (!searchableText) {
         continue;
       }
@@ -1270,7 +1334,9 @@ export const buildAnalyticsPayload = async (req, storeId, rawOrderFilters = {}) 
 
   const serializedProducts = productEntries
     .map((entry) => serializeTrackerEntry(entry))
-    .filter((entry) => !scopedOrderFiltersActive || hasScopedOrderActivity(entry))
+    .filter(
+      (entry) => !scopedOrderFiltersActive || hasScopedOrderActivity(entry),
+    )
     .sort((left, right) => {
       const rightActivity =
         new Date(right.last_order_at || right.updated_at || 0).getTime() || 0;
@@ -1337,7 +1403,9 @@ router.get("/", async (req, res) => {
   try {
     const { storeId } = await resolveStoreContext(req);
     const forceRefresh =
-      String(req.query.refresh || "").trim().toLowerCase() === "true";
+      String(req.query.refresh || "")
+        .trim()
+        .toLowerCase() === "true";
     const orderFilters = req.query || {};
     const cacheKey = [
       String(req.user?.id || "").trim(),
@@ -1357,7 +1425,8 @@ router.get("/", async (req, res) => {
 
     if (isSchemaCompatibilityError(error)) {
       return res.status(503).json({
-        error: "Product analysis is temporarily unavailable because the schema is outdated",
+        error:
+          "Product analysis is temporarily unavailable because the schema is outdated",
       });
     }
 

@@ -67,35 +67,35 @@ export class ProductManagementService {
         const warehouseSnapshot = extractWarehouseInventorySnapshot(variant);
 
         return {
-        id: variant.id,
-        product_id: variant.product_id,
-        title: variant.title,
-        price: variant.price,
-        cost: variant.cost || variant.cost_price || 0, // Extract cost from Shopify
-        sku: variant.sku,
-        position: variant.position,
-        inventory_policy: variant.inventory_policy,
-        compare_at_price: variant.compare_at_price,
-        fulfillment_service: variant.fulfillment_service,
-        inventory_management: variant.inventory_management,
-        option1: variant.option1,
-        option2: variant.option2,
-        option3: variant.option3,
-        created_at: variant.created_at,
-        updated_at: variant.updated_at,
-        taxable: variant.taxable,
-        barcode: variant.barcode,
-        grams: variant.grams,
-        image_id: variant.image_id,
-        weight: variant.weight,
-        weight_unit: variant.weight_unit,
-        inventory_item_id: variant.inventory_item_id,
-        inventory_quantity: variant.inventory_quantity,
-        shopify_inventory_quantity: variant.inventory_quantity,
-        warehouse_inventory_quantity: warehouseSnapshot.quantity,
-        old_inventory_quantity: variant.old_inventory_quantity,
-        requires_shipping: variant.requires_shipping,
-        admin_graphql_api_id: variant.admin_graphql_api_id,
+          id: variant.id,
+          product_id: variant.product_id,
+          title: variant.title,
+          price: variant.price,
+          cost: variant.cost || variant.cost_price || 0, // Extract cost from Shopify
+          sku: variant.sku,
+          position: variant.position,
+          inventory_policy: variant.inventory_policy,
+          compare_at_price: variant.compare_at_price,
+          fulfillment_service: variant.fulfillment_service,
+          inventory_management: variant.inventory_management,
+          option1: variant.option1,
+          option2: variant.option2,
+          option3: variant.option3,
+          created_at: variant.created_at,
+          updated_at: variant.updated_at,
+          taxable: variant.taxable,
+          barcode: variant.barcode,
+          grams: variant.grams,
+          image_id: variant.image_id,
+          weight: variant.weight,
+          weight_unit: variant.weight_unit,
+          inventory_item_id: variant.inventory_item_id,
+          inventory_quantity: variant.inventory_quantity,
+          shopify_inventory_quantity: variant.inventory_quantity,
+          warehouse_inventory_quantity: warehouseSnapshot.quantity,
+          old_inventory_quantity: variant.old_inventory_quantity,
+          requires_shipping: variant.requires_shipping,
+          admin_graphql_api_id: variant.admin_graphql_api_id,
         };
       });
 
@@ -105,29 +105,10 @@ export class ProductManagementService {
         product.cost_price = firstVariant.cost || firstVariant.cost_price || 0;
       }
 
-      // Extract ALL images with complete details
-      const images = productData?.images || [];
-      product.images = images.map((image) => ({
-        id: image.id,
-        product_id: image.product_id,
-        position: image.position,
-        created_at: image.created_at,
-        updated_at: image.updated_at,
-        alt: image.alt,
-        width: image.width,
-        height: image.height,
-        src: image.src,
-        variant_ids: image.variant_ids || [],
-        admin_graphql_api_id: image.admin_graphql_api_id,
-      }));
-
-      // Main image (first image or from image field)
-      product.image = productData?.image || null;
-      if (product.images && product.images.length > 0) {
-        product.image_url = product.images[0].src;
-      } else if (productData?.image?.src) {
-        product.image_url = productData.image.src;
-      }
+      // Remove images to reduce bandwidth
+      product.images = [];
+      product.image = null;
+      product.image_url = null;
 
       // Extract product options (Size, Color, etc.)
       const options = productData?.options || [];

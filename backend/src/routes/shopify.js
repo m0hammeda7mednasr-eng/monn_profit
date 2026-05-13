@@ -134,7 +134,6 @@ const PRODUCT_LIST_SELECT = [
   "operation_cost",
   "shipping_cost",
   "sku",
-  "image_url",
   "inventory_quantity",
   "last_synced_at",
   "local_updated_at",
@@ -159,7 +158,6 @@ const PRODUCT_LIST_SELECTS = [
     "operation_cost",
     "shipping_cost",
     "sku",
-    "image_url",
     "inventory_quantity",
     "last_synced_at",
     "created_at",
@@ -2493,7 +2491,6 @@ const buildProductVariantSummaries = (product) => {
         option3: null,
         barcode: null,
         image_id: null,
-        image_url: primaryImageUrl,
         weight: null,
         weight_unit: null,
         inventory_quantity: toNumber(product?.inventory_quantity),
@@ -2531,8 +2528,6 @@ const buildProductVariantSummaries = (product) => {
       option2: variant?.option2 ?? null,
       option3: variant?.option3 ?? null,
       barcode: variant?.barcode ?? null,
-      image_id: variant?.image_id ?? null,
-      image_url: resolveVariantImageUrl(variant, imageRows, primaryImageUrl),
       weight: variant?.weight ?? null,
       weight_unit: variant?.weight_unit ?? null,
       inventory_quantity: toNumber(variant?.inventory_quantity),
@@ -2567,7 +2562,6 @@ const buildBasicProductVariantSummaries = (product) => {
         option2: null,
         option3: null,
         barcode: null,
-        image_url: primaryImageUrl,
         inventory_quantity: toNumber(product?.inventory_quantity),
         shopify_inventory_quantity: toNumber(product?.inventory_quantity),
         created_at: product?.created_at || null,
@@ -2591,7 +2585,6 @@ const buildBasicProductVariantSummaries = (product) => {
     option2: variant?.option2 ?? null,
     option3: variant?.option3 ?? null,
     barcode: variant?.barcode ?? null,
-    image_url: resolveVariantImageUrl(variant, imageRows, primaryImageUrl),
     inventory_quantity: toNumber(variant?.inventory_quantity),
     shopify_inventory_quantity: toNumber(variant?.inventory_quantity),
     created_at: variant?.created_at || null,
@@ -2663,14 +2656,20 @@ const isBasicProductsListRequest = (query = {}) => {
   return view === "basic" || String(query?.light || "").trim() === "1";
 };
 
-const MOON_PROFIT_PAYMENT_TAG_PREFIXES = ["moon_profit_payment_method:", "moon_profit_pm:"];
+const MOON_PROFIT_PAYMENT_TAG_PREFIXES = [
+  "moon_profit_payment_method:",
+  "moon_profit_pm:",
+];
 const MOON_PROFIT_PAYMENT_NOTE_ATTRIBUTE_NAMES = [
   "moon_profit_payment_method",
   "moon_profit_pm",
   "payment_method",
 ];
 const MOON_PROFIT_STATUS_TAG_PREFIXES = ["moon_profit_status:"];
-const MOON_PROFIT_STATUS_NOTE_ATTRIBUTE_NAMES = ["moon_profit_status", "status"];
+const MOON_PROFIT_STATUS_NOTE_ATTRIBUTE_NAMES = [
+  "moon_profit_status",
+  "status",
+];
 
 const normalizePaymentMethod = (value) => {
   const normalized = String(value || "")

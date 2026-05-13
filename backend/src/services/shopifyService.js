@@ -105,7 +105,10 @@ export class ShopifyService {
       },
     );
 
-    if (Array.isArray(response.data?.errors) && response.data.errors.length > 0) {
+    if (
+      Array.isArray(response.data?.errors) &&
+      response.data.errors.length > 0
+    ) {
       throw new Error(
         response.data.errors
           .map((error) => error?.message || "Unknown Shopify GraphQL error")
@@ -162,7 +165,6 @@ export class ShopifyService {
       description: product.body_html,
       vendor: product.vendor,
       product_type: product.product_type,
-      image_url: product.image?.src || "",
       price: firstVariant.price || 0,
       cost_price: costPrice,
       currency: "USD",
@@ -188,7 +190,9 @@ export class ShopifyService {
       currency: order.currency,
       status: order.financial_status,
       fulfillment_status: order.fulfillment_status,
-      items_count: Array.isArray(order.line_items) ? order.line_items.length : 0,
+      items_count: Array.isArray(order.line_items)
+        ? order.line_items.length
+        : 0,
       created_at: order.created_at,
       updated_at: order.updated_at,
       data: order,
@@ -256,13 +260,7 @@ export class ShopifyService {
     };
   }
 
-  static async #syncEntity({
-    entityLabel,
-    fetcher,
-    updater,
-    userId,
-    storeId,
-  }) {
+  static async #syncEntity({ entityLabel, fetcher, updater, userId, storeId }) {
     const fetchedRows = await fetcher();
     const rowsWithScope = fetchedRows.map((row) => ({
       ...row,
@@ -499,12 +497,14 @@ export class ShopifyService {
     }
 
     const orders = await Promise.all(
-      matchedOrderIds.slice(0, first).map((orderId) =>
-        this.#fetchOrderById(accessToken, shop, orderId),
-      ),
+      matchedOrderIds
+        .slice(0, first)
+        .map((orderId) => this.#fetchOrderById(accessToken, shop, orderId)),
     );
 
-    return orders.filter(Boolean).map((order) => this.#mapOrderFromShopify(order));
+    return orders
+      .filter(Boolean)
+      .map((order) => this.#mapOrderFromShopify(order));
   }
 
   static async syncRecentOrders(
