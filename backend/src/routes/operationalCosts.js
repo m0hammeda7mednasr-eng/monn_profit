@@ -68,7 +68,7 @@ router.get("/", async (req, res) => {
       .select(
         `
         *,
-        product:products(id, title, image_url)
+        product:products(id, title)
       `,
       )
       .limit(100)
@@ -106,7 +106,7 @@ router.get("/:id", async (req, res) => {
       .select(
         `
         *,
-        product:products(id, title, image_url)
+        product:products(id, title)
       `,
       )
       .eq("id", req.params.id);

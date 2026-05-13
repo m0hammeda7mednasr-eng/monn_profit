@@ -2215,16 +2215,7 @@ const getProductVariantRows = (product) => {
 };
 
 const getProductImageRows = (product) => {
-  const parsedData = parseJsonField(product?.data);
-  const images = Array.isArray(parsedData?.images) ? parsedData.images : [];
-
-  return images.map((image) => ({
-    id: image?.id || null,
-    src: image?.src || "",
-    alt: image?.alt || "",
-    position: image?.position || null,
-    variant_ids: Array.isArray(image?.variant_ids) ? image.variant_ids : [],
-  }));
+  return [];
 };
 
 const getProductTotalInventory = (product) => {
@@ -2268,19 +2259,7 @@ const getProductPrimarySku = (product) => {
 };
 
 const getProductPrimaryImageUrl = (product) => {
-  const currentImageUrl = String(product?.image_url || "").trim();
-  if (currentImageUrl) {
-    return currentImageUrl;
-  }
-
-  const imageRows = getProductImageRows(product);
-  const firstImageUrl = String(imageRows[0]?.src || "").trim();
-  if (firstImageUrl) {
-    return firstImageUrl;
-  }
-
-  const parsedData = parseJsonField(product?.data);
-  return String(parsedData?.image?.src || "").trim();
+  return "";
 };
 
 const normalizeSupplierLinkRow = (link = {}, supplier = null) => ({
@@ -3061,24 +3040,6 @@ const matchesOrderSearch = (order, searchTerm) => {
   });
 };
 
-const getOrderLineItemImageUrl = (item) => {
-  const propertyImageUrl = Array.isArray(item?.properties)
-    ? item.properties.find(
-        (entry) => String(entry?.name || "").trim() === "_image_url",
-      )?.value
-    : "";
-
-  return String(
-    propertyImageUrl ||
-      item?.image_url ||
-      item?.image?.src ||
-      item?.image?.url ||
-      item?.featured_image?.src ||
-      item?.featured_image?.url ||
-      "",
-  ).trim();
-};
-
 const buildOrderItemPreviews = (order) =>
   getOrderLineItems(order)
     .slice(0, 4)
@@ -3086,7 +3047,7 @@ const buildOrderItemPreviews = (order) =>
       id: item?.id || null,
       title: item?.title || item?.name || "",
       quantity: toNumber(item?.quantity),
-      image_url: getOrderLineItemImageUrl(item),
+      image_url: "",
     }));
 
 const buildOrderListItem = (order) => {
@@ -3301,6 +3262,32 @@ const getLiveShopifyOrdersPage = async ({
   };
 };
 
+const buildLightOrderLineItems = (lineItems = []) =>
+  (Array.isArray(lineItems) ? lineItems : []).map((item) => ({
+    id: item?.id || null,
+    title: item?.title || item?.name || "",
+    variant_title: item?.variant_title || "",
+    quantity: toNumber(item?.quantity),
+    price: item?.price ?? 0,
+    sku: item?.sku || "",
+    product_id: item?.product_id || null,
+    variant_id: item?.variant_id || null,
+    vendor: item?.vendor || "",
+    fulfillment_status: item?.fulfillment_status || null,
+    fulfillable_quantity: item?.fulfillable_quantity ?? 0,
+    requires_shipping: Boolean(item?.requires_shipping),
+    taxable: Boolean(item?.taxable),
+    name: item?.name || item?.title || "",
+    properties: Array.isArray(item?.properties)
+      ? item.properties.filter(
+          (property) =>
+            String(property?.name || "").trim().toLowerCase() !== "_image_url",
+        )
+      : [],
+    product_exists: item?.product_exists !== false,
+    total_discount: item?.total_discount ?? 0,
+  }));
+
 const buildLiveShopifyOrderDetails = (order) => {
   const parsedData = parseJsonField(order?.data);
   const customer = parsedData?.customer || {};
@@ -3315,9 +3302,7 @@ const buildLiveShopifyOrderDetails = (order) => {
       `${customer?.first_name || ""} ${customer?.last_name || ""}`.trim(),
     customer_email: order?.customer_email || customer?.email || "",
     customer_phone: getOrderCustomerPhone(order),
-    line_items: Array.isArray(parsedData?.line_items)
-      ? parsedData.line_items
-      : [],
+    line_items: buildLightOrderLineItems(parsedData?.line_items),
     shipping_address: parsedData?.shipping_address || null,
     billing_address: parsedData?.billing_address || null,
     customer_info: parsedData?.customer
@@ -5704,17 +5689,6 @@ router.get(
 
       const { orders: missingOrders, cacheHit } =
         await getMissingOrdersForRequest(req);
-
-      if (pagination.offset === 0) {
-        void ensureMissingOrderNotifications(missingOrders).catch(
-          (notificationError) => {
-            console.error(
-              "Missing orders notification error (non-blocking):",
-              notificationError,
-            );
-          },
-        );
-      }
 
       const summary = {
         total_missing: missingOrders.length,

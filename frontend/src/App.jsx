@@ -14,10 +14,6 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import "./index.css";
 
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Products = lazy(() => import("./pages/Products"));
-const ProductAnalysis = lazy(() => import("./pages/ProductAnalysis"));
-const ProductDetails = lazy(() => import("./pages/ProductDetails"));
 const Orders = lazy(() => import("./pages/Orders"));
 const OrderDetails = lazy(() => import("./pages/OrderDetails"));
 const BostaScanner = lazy(() => import("./pages/BostaScanner"));
@@ -47,42 +43,14 @@ function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute permission="can_view_dashboard">
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/products"
-                element={
-                  <ProtectedRoute permission="can_view_products">
-                    <Products />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/dashboard" element={<Navigate to="/orders" replace />} />
+              <Route path="/products" element={<Navigate to="/orders" replace />} />
               <Route
                 path="/suppliers/*"
-                element={<Navigate to="/products" replace />}
+                element={<Navigate to="/orders" replace />}
               />
-              <Route
-                path="/products/analysis"
-                element={
-                  <ProtectedRoute permission="can_view_products">
-                    <ProductAnalysis />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/products/:id"
-                element={
-                  <ProtectedRoute permission="can_view_products">
-                    <ProductDetails />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/products/analysis" element={<Navigate to="/orders" replace />} />
+              <Route path="/products/:id" element={<Navigate to="/orders" replace />} />
               <Route
                 path="/orders"
                 element={
@@ -131,7 +99,7 @@ function App() {
                   </AdminRoute>
                 }
               />
-              <Route path="/" element={<Navigate to="/dashboard" />} />
+              <Route path="/" element={<Navigate to="/orders" />} />
 
               {/* Redirect old routes to main pages */}
               <Route
@@ -140,11 +108,11 @@ function App() {
               />
               <Route
                 path="/barcode-labels"
-                element={<Navigate to="/products" replace />}
+                element={<Navigate to="/orders" replace />}
               />
               <Route
                 path="/warehouse/*"
-                element={<Navigate to="/products" replace />}
+                element={<Navigate to="/orders" replace />}
               />
               <Route
                 path="/orders/missing"
@@ -164,16 +132,16 @@ function App() {
               />
               <Route
                 path="/my-reports"
-                element={<Navigate to="/dashboard" replace />}
+                element={<Navigate to="/orders" replace />}
               />
               <Route
                 path="/request-access"
-                element={<Navigate to="/dashboard" replace />}
+                element={<Navigate to="/orders" replace />}
               />
               <Route path="/tasks" element={<Navigate to="/admin" replace />} />
               <Route
                 path="/my-tasks"
-                element={<Navigate to="/dashboard" replace />}
+                element={<Navigate to="/orders" replace />}
               />
               <Route
                 path="/activity-log"

@@ -145,7 +145,7 @@ export const buildVariantRows = (products, isAdmin) =>
               cost_price: product?.cost_price ?? null,
               sku: product?.sku || "",
               inventory_quantity: product?.inventory_quantity ?? 0,
-              image_url: product?.image_url || "",
+              image_url: "",
               updated_at:
                 product?.updated_at || product?.local_updated_at || null,
               created_at: product?.created_at || null,
@@ -200,7 +200,7 @@ export const buildVariantRows = (products, isAdmin) =>
         variant_title: variantTitle,
         vendor: product?.vendor || "",
         product_type: product?.product_type || "",
-        image_url: variant?.image_url || product?.image_url || "",
+        image_url: "",
         sku: String(variant?.sku || product?.sku || "").trim(),
         barcode: String(variant?.barcode || "").trim(),
         supplier_links: Array.isArray(variant?.supplier_links)

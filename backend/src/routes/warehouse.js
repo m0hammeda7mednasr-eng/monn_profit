@@ -1183,7 +1183,7 @@ const serializeScanProduct = (product) => ({
   vendor: product?.vendor || "",
   price: product?.price ?? null,
   barcode: product?.barcode || "",
-  image_url: product?.image_url || "",
+  image_url: "",
   option_values: Array.isArray(product?.option_values)
     ? product.option_values
     : [],
@@ -1228,7 +1228,7 @@ const enrichScanEvent = (scan, catalog) => {
       normalized_sku:
         variantRow?.normalized_sku || normalizeSku(variantRow?.sku),
       vendor: variantRow?.vendor || fallbackProduct?.vendor || "",
-      image_url: variantRow?.image_url || "",
+      image_url: "",
       barcode: variantRow?.barcode || "",
       option_values: Array.isArray(variantRow?.option_values)
         ? variantRow.option_values

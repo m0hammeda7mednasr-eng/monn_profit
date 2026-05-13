@@ -1108,15 +1108,7 @@ export default function OrderDetails() {
                         </div>
                       )}
                       <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center">
-                        {item.image_url ? (
-                          <img
-                            src={item.image_url}
-                            alt={item.title}
-                            className="w-full h-full object-cover rounded-lg"
-                          />
-                        ) : (
-                          <Package size={32} className="text-gray-400" />
-                        )}
+                        <Package size={32} className="text-gray-400" />
                       </div>
                       <div className="flex-1">
                         <h3 className="font-semibold text-gray-800">

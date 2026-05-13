@@ -11,7 +11,6 @@ import { authAPI, getErrorMessage } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
 import { useLocale } from "../context/LocaleContext";
 import LanguageToggle from "../components/LanguageToggle";
-import moonLogo from "../assets/moon-logo.jpeg";
 
 export default function Login() {
   const [formData, setFormData] = useState({
@@ -108,13 +107,8 @@ export default function Login() {
                 {select("تجربة تشغيل أكثر هدوءًا", "A calmer operating experience")}
               </div>
               <div className="mt-8 flex items-center gap-4">
-                <div className="h-16 w-16 overflow-hidden rounded-[22px] border border-white/80 shadow-lg shadow-sky-100/80">
-                  <img
-                    src={moonLogo}
-                    alt="Moon Profit logo"
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
+                <div className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/80 bg-sky-50 text-sky-700 shadow-lg shadow-sky-100/80">
+                  <ShieldCheck size={26} />
                 </div>
                 <div>
                   <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950">
@@ -171,13 +165,8 @@ export default function Login() {
           <section className="app-surface-strong rounded-[34px] p-6 sm:p-8 xl:p-10">
             <div className="mx-auto w-full max-w-md">
               <div className="mb-8 text-center lg:text-left">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-[22px] border border-white/80 shadow-lg shadow-sky-100/80 lg:mx-0">
-                  <img
-                    src={moonLogo}
-                    alt="Moon Profit logo"
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/80 bg-sky-50 text-sky-700 shadow-lg shadow-sky-100/80 lg:mx-0">
+                  <Lock size={24} />
                 </div>
                 <h2 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950">
                   {t("auth.signIn", "Sign in")}

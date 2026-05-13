@@ -9,7 +9,6 @@ import {
   requirePermission,
 } from "../middleware/permissions.js";
 import fileUploadService from "../services/fileUploadService.js";
-import notificationService from "../services/notificationService.js";
 
 const router = express.Router();
 
@@ -438,24 +437,7 @@ const createTaskNotification = async ({
   taskId,
   metadata = {},
 }) => {
-  if (!userId) {
-    return;
-  }
-
-  try {
-    await notificationService.createNotification({
-      userId,
-      type: "task",
-      title,
-      message,
-      entityType: "task",
-      entityId: taskId,
-      metadata,
-    });
-  } catch (error) {
-    // Notifications are best-effort and must not break core task flows.
-    console.error("Task notification error (non-blocking):", error);
-  }
+  return;
 };
 
 const fetchTaskAssignees = async () => {

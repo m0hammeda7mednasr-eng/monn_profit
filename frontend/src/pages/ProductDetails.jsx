@@ -7,7 +7,6 @@ import {
   Clock,
   Copy,
   Edit2,
-  Image as ImageIcon,
   Package,
   Printer,
   RefreshCw,
@@ -756,16 +755,8 @@ export default function ProductDetails() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-5 flex h-80 items-center justify-center overflow-hidden rounded-[24px] bg-slate-100">
-                  {product.image_url ? (
-                    <img
-                      src={product.image_url}
-                      alt={product.title}
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <ImageIcon size={64} className="text-slate-400" />
-                  )}
+                <div className="mt-5 flex h-32 items-center justify-center overflow-hidden rounded-[24px] bg-slate-100">
+                  <Package size={44} className="text-slate-300" />
                 </div>
               </section>
 

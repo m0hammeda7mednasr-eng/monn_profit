@@ -318,7 +318,6 @@ const GROWTH_CENTER_PRODUCT_SELECT = [
   "store_id",
   "user_id",
   "title",
-  "image_url",
   "shopify_id",
   "sku",
   "price",
@@ -3118,12 +3117,6 @@ router.get("/stats", authenticateToken, async (req, res) => {
     );
 
     rememberCacheEntry(dashboardStatsCache, cacheKey, payload);
-    ensureLowStockNotifications(lowStockProducts).catch((notificationError) => {
-      console.error(
-        "Low-stock notification dispatch failed:",
-        notificationError,
-      );
-    });
     res.json(payload);
   } catch (error) {
     console.error("Dashboard stats error:", error);

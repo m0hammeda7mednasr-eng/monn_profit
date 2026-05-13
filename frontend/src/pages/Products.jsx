@@ -812,8 +812,8 @@ export default function Products() {
                   key={variant.key}
                   className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
                 >
-                  <div className="h-40 bg-gradient-to-br from-slate-100 via-slate-50 to-slate-200 flex items-center justify-center">
-                    <VariantImage variant={variant} />
+                  <div className="h-24 bg-slate-50 flex items-center justify-center border-b border-slate-100">
+                    <Package size={34} className="text-slate-300" />
                   </div>
 
                   <div className="space-y-3 p-4">
@@ -931,26 +931,6 @@ function DetailItem({ label, value, valueClassName = "" }) {
         {value}
       </p>
     </div>
-  );
-}
-
-function VariantImage({ variant }) {
-  const [hasError, setHasError] = useState(false);
-  const imageUrl = String(variant?.image_url || "").trim();
-
-  if (!imageUrl || hasError) {
-    return <Package size={56} className="text-slate-400" />;
-  }
-
-  return (
-    <img
-      src={imageUrl}
-      alt={`${variant?.product_title || "Product"} ${variant?.variant_title || ""}`.trim()}
-      className="w-full h-full object-cover"
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      onError={() => setHasError(true)}
-    />
   );
 }
 

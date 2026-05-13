@@ -288,10 +288,6 @@ export const warehouseAPI = {
     }),
 };
 
-export const productAnalysisAPI = {
-  get: (params = {}) => api.get("/product-analysis", { params }),
-};
-
 export const suppliersAPI = {
   list: (params = {}) => api.get("/suppliers", { params }),
   getById: (id, params = {}) => api.get(`/suppliers/${id}`, { params }),

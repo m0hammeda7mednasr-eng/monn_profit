@@ -42,24 +42,11 @@ export const getProductVariantRows = (product) => {
 };
 
 export const getProductImageRows = (product) => {
-  const parsedData = parseWarehouseJsonField(product?.data);
-  const images = Array.isArray(parsedData?.images) ? parsedData.images : [];
-
-  return images.map((image) => ({
-    id: image?.id || null,
-    src: image?.src || "",
-    variant_ids: Array.isArray(image?.variant_ids) ? image.variant_ids : [],
-  }));
+  return [];
 };
 
 export const getProductPrimaryImageUrl = (product) => {
-  const parsedData = parseWarehouseJsonField(product?.data);
-  return (
-    parsedData?.image?.src ||
-    parsedData?.featured_image?.src ||
-    String(product?.image_url || "").trim() ||
-    ""
-  );
+  return "";
 };
 
 export const resolveVariantImageUrl = (

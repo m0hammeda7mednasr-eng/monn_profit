@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  BarChart3,
   ChevronDown,
-  Home,
   LogOut,
   Menu,
-  Package,
   Server,
   Settings,
   Shield,
@@ -16,18 +13,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useLocale } from "../context/LocaleContext";
-import NotificationBell from "./NotificationBell";
 import LanguageToggle from "./LanguageToggle";
-import moonLogo from "../assets/moon-logo.jpeg";
 
 const buildSharedNav = (t, select) => [
-  {
-    type: "item",
-    icon: Home,
-    label: t("sidebar.dashboard", "Dashboard"),
-    path: "/dashboard",
-    subtitle: t("sidebar.dashboardSubtitle", "Quick view of daily performance"),
-  },
   {
     type: "item",
     icon: ShoppingCart,
@@ -43,30 +31,6 @@ const buildSharedNav = (t, select) => [
     path: "/bosta-scanner",
     subtitle: select("سكان شحنات بوسطة", "Scan Bosta shipments"),
     permission: "can_view_orders",
-  },
-  {
-    type: "group",
-    id: "catalog",
-    icon: Package,
-    label: t("sidebar.catalogSection", "Catalog & Analysis"),
-    subtitle: t(
-      "sidebar.catalogSectionSubtitle",
-      "Products and performance insights",
-    ),
-    items: [
-      {
-        icon: Package,
-        label: t("sidebar.products", "Products"),
-        path: "/products",
-        permission: "can_view_products",
-      },
-      {
-        icon: BarChart3,
-        label: t("sidebar.productAnalysis", "Product Analysis"),
-        path: "/products/analysis",
-        permission: "can_view_products",
-      },
-    ],
   },
 ];
 
@@ -85,9 +49,7 @@ const buildAdminNav = (t, select) => [
   },
 ];
 
-const getAutoExpandedGroups = (pathname) => ({
-  catalog: pathname.startsWith("/products"),
-});
+const getAutoExpandedGroups = () => ({});
 
 const isPathActive = (pathname, itemPath) => {
   switch (itemPath) {
@@ -99,12 +61,6 @@ const isPathActive = (pathname, itemPath) => {
         (/^\/orders\/[^/]+$/.test(pathname) &&
           pathname !== "/orders/missing" &&
           pathname !== "/orders/in-stock-follow-up")
-      );
-    case "/products":
-      return (
-        pathname === "/products" ||
-        (/^\/products\/[^/]+$/.test(pathname) &&
-          pathname !== "/products/analysis")
       );
     default:
       return pathname === itemPath;
@@ -227,8 +183,6 @@ export default function Sidebar() {
   const hiddenTransformClass = isRTL ? "translate-x-full" : "-translate-x-full";
   const headerTextAlignClass = isRTL ? "text-right" : "text-left";
   const settingsTextAlignClass = isRTL ? "text-right" : "text-left";
-  const logoRowClass = isRTL ? "flex-row" : "flex-row-reverse";
-
   return (
     <>
       <button
@@ -244,23 +198,13 @@ export default function Sidebar() {
         } lg:translate-x-0 w-72 border-r border-slate-800/80 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white transition-transform duration-300 z-40 flex flex-col overflow-visible shadow-[0_30px_70px_-42px_rgba(15,23,42,0.95)]`}
       >
         <div className="relative z-40 border-b border-slate-800/90 bg-slate-950/72 p-6 backdrop-blur-xl shrink-0">
-          <div
-            className={`flex items-center justify-between gap-3 ${logoRowClass}`}
-          >
-            <div className={`${headerTextAlignClass} min-w-0`}>
-              <h1 className="text-xl font-semibold tracking-[0.01em] text-white">
-                Moon Profit
-              </h1>
-              <p className="mt-1 truncate text-sm text-slate-300">
-                {user?.name || t("sidebar.userFallback", "User")}
-              </p>
-            </div>
-            <img
-              src={moonLogo}
-              alt="Moon Profit logo"
-              className="h-12 w-12 rounded-xl object-cover ring-2 ring-sky-500/40 shadow-lg"
-              loading="lazy"
-            />
+          <div className={`${headerTextAlignClass} min-w-0`}>
+            <h1 className="text-xl font-semibold tracking-[0.01em] text-white">
+              Moon Profit
+            </h1>
+            <p className="mt-1 truncate text-sm text-slate-300">
+              {user?.name || t("sidebar.userFallback", "User")}
+            </p>
           </div>
 
           <div
@@ -268,7 +212,6 @@ export default function Sidebar() {
               isRTL ? "justify-end" : "justify-start"
             }`}
           >
-            <NotificationBell />
             {isAdmin && (
               <span className="inline-block rounded-full border border-sky-400/20 bg-sky-500/90 px-3 py-1 text-xs font-semibold text-white shadow-[0_12px_26px_-18px_rgba(14,165,233,0.9)]">
                 {t("sidebar.adminBadge", "Admin")}

@@ -1447,17 +1447,9 @@ export default function Orders() {
     return (
       <div className="flex min-w-[280px] items-center gap-3">
         <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
-          {String(primaryItem?.image_url || "").trim() ? (
-            <img
-              src={primaryItem.image_url}
-              alt={primaryItem.title || "Order item"}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-slate-400">
-              <Package size={18} />
-            </div>
-          )}
+          <div className="flex h-full w-full items-center justify-center text-slate-400">
+            <Package size={18} />
+          </div>
           {toNumber(primaryItem?.quantity) > 1 ? (
             <span className="absolute bottom-1 left-1 rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
               x{toNumber(primaryItem.quantity)}
