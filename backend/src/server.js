@@ -22,6 +22,7 @@ import eventsRoutes from "./routes/events.js";
 import warehouseRoutes from "./routes/warehouse.js";
 import suppliersRoutes from "./routes/suppliers.js";
 import metaAnalyticsRoutes from "./routes/metaAnalytics.js";
+import productAnalysisRoutes from "./routes/productAnalysis.js";
 import bostaRoutes from "./routes/bosta.js";
 import productsExportRoutes from "./routes/productsExport.js";
 import { supabase } from "./supabaseClient.js";
@@ -213,6 +214,7 @@ app.use("/api/order-comments", orderCommentsRoutes);
 app.use("/api/warehouse", warehouseRoutes);
 app.use("/api/suppliers", suppliersRoutes);
 app.use("/api/meta-analytics", metaAnalyticsRoutes);
+app.use("/api/product-analysis", productAnalysisRoutes);
 app.use("/api/bosta", bostaRoutes);
 app.use("/api/products", productsExportRoutes);
 

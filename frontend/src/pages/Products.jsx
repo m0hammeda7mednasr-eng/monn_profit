@@ -855,6 +855,13 @@ export default function Products() {
                       />
                     </div>
 
+                    {isAdmin ? (
+                      <CostBreakdown
+                        variant={variant}
+                        formatAmount={formatAmount}
+                      />
+                    ) : null}
+
                     {variant.option_values.length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {variant.option_values.map((value) => (
@@ -930,6 +937,52 @@ function DetailItem({ label, value, valueClassName = "" }) {
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+function CostBreakdown({ variant, formatAmount }) {
+  const baseCost = toNumber(variant?.cost_price);
+  const adsCost = toNumber(variant?.ads_cost);
+  const operationCost = toNumber(variant?.operation_cost);
+  const shippingCost = toNumber(variant?.shipping_cost);
+  const totalUnitCost = baseCost + adsCost + operationCost + shippingCost;
+  const unitProfit = toNumber(variant?.price) - totalUnitCost;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+          Unit cost
+        </p>
+        <span
+          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+            unitProfit >= 0
+              ? "bg-emerald-100 text-emerald-700"
+              : "bg-rose-100 text-rose-700"
+          }`}
+        >
+          Profit {formatAmount(unitProfit)}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+        <CostPart label="Base" value={formatAmount(baseCost)} />
+        <CostPart label="Ads" value={formatAmount(adsCost)} />
+        <CostPart label="Operation" value={formatAmount(operationCost)} />
+        <CostPart label="Shipping" value={formatAmount(shippingCost)} />
+      </div>
+      <div className="mt-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+        Total cost: {formatAmount(totalUnitCost)}
+      </div>
+    </div>
+  );
+}
+
+function CostPart({ label, value }) {
+  return (
+    <div className="rounded-lg bg-white px-3 py-2">
+      <p className="text-[11px] text-slate-500">{label}</p>
+      <p className="mt-1 font-semibold text-slate-900">{value}</p>
     </div>
   );
 }

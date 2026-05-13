@@ -1109,17 +1109,9 @@ export default function NetProfit() {
                       >
                         <td className="px-5 py-5">
                           <div className="flex min-w-0 items-start gap-4">
-                            {product.image_url ? (
-                              <img
-                                src={product.image_url}
-                                alt={product.title}
-                                className="h-[72px] w-[72px] flex-none rounded-[22px] border border-slate-200 object-cover shadow-sm shadow-slate-200/60"
-                              />
-                            ) : (
-                              <div className="flex h-[72px] w-[72px] flex-none items-center justify-center rounded-[22px] border border-slate-200 bg-slate-100">
-                                <Package size={22} className="text-slate-400" />
-                              </div>
-                            )}
+                            <div className="flex h-[72px] w-[72px] flex-none items-center justify-center rounded-[22px] border border-slate-200 bg-slate-100">
+                              <Package size={22} className="text-slate-400" />
+                            </div>
                             <div className="min-w-0 flex-1">
                               <p
                                 className="break-words text-[15px] font-semibold leading-7 tracking-tight text-slate-900"
