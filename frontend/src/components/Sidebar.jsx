@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  BarChart3,
   ChevronDown,
   LogOut,
   Menu,
@@ -10,7 +9,6 @@ import {
   Settings,
   Shield,
   ShoppingCart,
-  TrendingUp,
   Truck,
   X,
 } from "lucide-react";
@@ -35,38 +33,14 @@ const buildSharedNav = (t, select) => [
     subtitle: select("سكان شحنات بوسطة", "Scan Bosta shipments"),
     permission: "can_view_orders",
   },
+  {
+    type: "item",
+    icon: Package,
+    label: t("sidebar.products", "Products"),
+    path: "/products",
+    permission: "can_view_products",
+  },
 ];
-
-const buildCatalogNavGroup = (t) => ({
-  type: "group",
-  id: "catalog",
-  icon: Package,
-  label: t("sidebar.catalogSection", "Catalog & Analysis"),
-  subtitle: t(
-    "sidebar.catalogSectionSubtitle",
-    "Products and performance insights",
-  ),
-  items: [
-    {
-      icon: Package,
-      label: t("sidebar.products", "Products"),
-      path: "/products",
-      permission: "can_view_products",
-    },
-    {
-      icon: BarChart3,
-      label: t("sidebar.productAnalysis", "Product Analysis"),
-      path: "/products/analysis",
-      permission: "can_view_products",
-    },
-    {
-      icon: TrendingUp,
-      label: t("sidebar.netProfit", "Net Profit"),
-      path: "/net-profit",
-      adminOnly: true,
-    },
-  ],
-});
 
 const buildAdminNav = (t, select) => [
   {
@@ -83,9 +57,7 @@ const buildAdminNav = (t, select) => [
   },
 ];
 
-const getAutoExpandedGroups = (pathname = "") => ({
-  catalog: pathname.startsWith("/products") || pathname === "/net-profit",
-});
+const getAutoExpandedGroups = () => ({});
 
 const isPathActive = (pathname, itemPath) => {
   switch (itemPath) {
@@ -120,10 +92,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const sharedNav = useMemo(
-    () => [...buildSharedNav(t, select), buildCatalogNavGroup(t)],
-    [select, t],
-  );
+  const sharedNav = useMemo(() => buildSharedNav(t, select), [select, t]);
   const adminNav = useMemo(() => buildAdminNav(t, select), [select, t]);
 
   useEffect(() => {

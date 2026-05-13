@@ -18,9 +18,7 @@ const Orders = lazy(() => import("./pages/Orders"));
 const OrderDetails = lazy(() => import("./pages/OrderDetails"));
 const Products = lazy(() => import("./pages/Products"));
 const ProductDetails = lazy(() => import("./pages/ProductDetails"));
-const ProductAnalysis = lazy(() => import("./pages/ProductAnalysis"));
 const BostaScanner = lazy(() => import("./pages/BostaScanner"));
-const NetProfit = lazy(() => import("./pages/NetProfit"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Users = lazy(() => import("./pages/Users"));
 const AdminPage = lazy(() => import("./pages/Admin"));
@@ -62,11 +60,7 @@ function App() {
               />
               <Route
                 path="/products/analysis"
-                element={
-                  <ProtectedRoute permission="can_view_products">
-                    <ProductAnalysis />
-                  </ProtectedRoute>
-                }
+                element={<Navigate to="/products" replace />}
               />
               <Route
                 path="/products/:id"
@@ -178,11 +172,7 @@ function App() {
               />
               <Route
                 path="/net-profit"
-                element={
-                  <AdminRoute>
-                    <NetProfit />
-                  </AdminRoute>
-                }
+                element={<Navigate to="/products" replace />}
               />
               <Route
                 path="/meta-analytics"
