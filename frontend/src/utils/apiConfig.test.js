@@ -1,7 +1,6 @@
 import {
   DEFAULT_DEV_API_BASE,
   DEFAULT_PROD_API_BASE,
-  VERCEL_API_PROXY_BASE,
   getEventsStreamUrl,
   normalizeApiBase,
   resolveApiBase,
@@ -31,13 +30,20 @@ describe("apiConfig", () => {
     ).toBe(DEFAULT_PROD_API_BASE);
   });
 
-  test("resolveApiBase can opt back into the Vercel API proxy", () => {
+  test("resolveApiBase ignores relative API bases in production", () => {
     expect(
       resolveApiBase({
         NODE_ENV: "production",
-        REACT_APP_USE_VERCEL_API_PROXY: "true",
+        REACT_APP_API_URL: "/api",
       }),
-    ).toBe(VERCEL_API_PROXY_BASE);
+    ).toBe(DEFAULT_PROD_API_BASE);
+
+    expect(
+      resolveApiBase({
+        NODE_ENV: "production",
+        REACT_APP_API_BASE_URL: "/api",
+      }),
+    ).toBe(DEFAULT_PROD_API_BASE);
   });
 
   test("resolveApiBase uses local fallback outside production", () => {

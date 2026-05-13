@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
 import cors from "cors";
+import compression from "compression";
 // import { createClient } from "@supabase/supabase-js"; // Not used directly here
 import authRoutes from "./routes/auth.js";
 import shopifyRoutes from "./routes/shopify.js";
@@ -123,8 +124,22 @@ const corsOptions = {
   exposedHeaders: ["X-Request-Id", "X-Response-Time", "Server-Timing"],
 };
 
+const shouldCompressResponse = (req, res) => {
+  if (String(req.path || "").startsWith("/api/events/stream")) {
+    return false;
+  }
+
+  return compression.filter(req, res);
+};
+
 // Middleware
 app.use(cors(corsOptions));
+app.use(
+  compression({
+    threshold: 1024,
+    filter: shouldCompressResponse,
+  }),
+);
 app.use(requestProfilingMiddleware);
 app.use(
   "/api/shopify/webhooks",

@@ -2,21 +2,43 @@ import { supabase } from "../supabaseClient.js";
 import { ShopifyService } from "./shopifyService.js";
 import { emitRealtimeEvent } from "./realtimeEventService.js";
 
+const toBooleanEnvFlag = (value, fallback = false) => {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+};
+
+const DEFAULT_BACKGROUND_SYNC_ENABLED = process.env.NODE_ENV !== "production";
+const BACKGROUND_SYNC_ENABLED = toBooleanEnvFlag(
+  process.env.SHOPIFY_BACKGROUND_SYNC_ENABLED,
+  DEFAULT_BACKGROUND_SYNC_ENABLED,
+);
 const BATCH_SIZE = Math.max(
   25,
-  parseInt(process.env.SHOPIFY_BACKGROUND_SYNC_BATCH_SIZE, 10) || 100,
+  parseInt(process.env.SHOPIFY_BACKGROUND_SYNC_BATCH_SIZE, 10) || 50,
 );
 const MAX_BATCHES_PER_STATE_PER_CYCLE = Math.max(
   1,
-  parseInt(process.env.SHOPIFY_BACKGROUND_SYNC_MAX_BATCHES_PER_CYCLE, 10) || 5,
+  parseInt(process.env.SHOPIFY_BACKGROUND_SYNC_MAX_BATCHES_PER_CYCLE, 10) || 1,
 );
 const TICK_INTERVAL_MS = Math.max(
   10 * 1000,
-  parseInt(process.env.SHOPIFY_BACKGROUND_SYNC_INTERVAL_MS, 10) || 30 * 1000,
+  parseInt(process.env.SHOPIFY_BACKGROUND_SYNC_INTERVAL_MS, 10) || 10 * 60 * 1000,
 );
 const FOLLOW_UP_DELAY_MS = Math.max(
   1000,
-  parseInt(process.env.SHOPIFY_BACKGROUND_SYNC_FOLLOW_UP_DELAY_MS, 10) || 2000,
+  parseInt(process.env.SHOPIFY_BACKGROUND_SYNC_FOLLOW_UP_DELAY_MS, 10) ||
+    60 * 1000,
 );
 const RECENT_LOOKBACK_MS = 2 * 60 * 60 * 1000;
 const ENTITY_ORDER = ["orders", "products", "customers"];
@@ -286,6 +308,10 @@ export const queueShopifyBackgroundSync = (
   token,
   entityNames = ENTITY_ORDER,
 ) => {
+  if (!BACKGROUND_SYNC_ENABLED) {
+    return null;
+  }
+
   const state = queueEntities(token, entityNames);
   setTimeout(() => {
     void runBackgroundShopifySyncCycle();
@@ -294,6 +320,10 @@ export const queueShopifyBackgroundSync = (
 };
 
 export const runBackgroundShopifySyncCycle = async () => {
+  if (!BACKGROUND_SYNC_ENABLED) {
+    return;
+  }
+
   if (cycleInFlight) {
     return;
   }
@@ -327,6 +357,11 @@ export const runBackgroundShopifySyncCycle = async () => {
 };
 
 export const startShopifyBackgroundSync = () => {
+  if (!BACKGROUND_SYNC_ENABLED) {
+    console.log("Shopify background sync is disabled.");
+    return;
+  }
+
   if (syncTimer) {
     return;
   }

@@ -74,10 +74,34 @@ const SCOPED_ENTITY_PAGE_CACHE_NAMESPACE = "shopify:scoped-entity-page";
 const PRODUCT_SUPPLIER_LINKS_CACHE_NAMESPACE = "shopify:product-supplier-links";
 const SCOPED_ENTITY_PAGE_CACHE_MAX_ENTRIES = 250;
 const PRODUCT_SUPPLIER_LINKS_CACHE_TTL_MS = 10 * 60 * 1000;
-const DEFAULT_LIST_LIMIT = 200;
-const MAX_LIST_LIMIT = 200;
-const ORDER_LIST_PAGE_LIMIT = 4500;
-const ORDER_LIST_MAX_VISIBLE = 4500;
+const toPositiveIntegerEnv = (
+  name,
+  fallback,
+  { min = 1, max = Number.MAX_SAFE_INTEGER } = {},
+) => {
+  const parsed = parseInt(process.env[name], 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(parsed, min), max);
+};
+const DEFAULT_LIST_LIMIT = toPositiveIntegerEnv("API_DEFAULT_LIST_LIMIT", 100, {
+  max: 200,
+});
+const MAX_LIST_LIMIT = toPositiveIntegerEnv("API_MAX_LIST_LIMIT", 100, {
+  max: 200,
+});
+const ORDER_LIST_PAGE_LIMIT = toPositiveIntegerEnv(
+  "ORDER_API_PAGE_LIMIT",
+  300,
+  { max: 1000 },
+);
+const ORDER_LIST_MAX_VISIBLE = toPositiveIntegerEnv(
+  "ORDER_API_MAX_VISIBLE",
+  600,
+  { max: 1500 },
+);
 const ORDER_SEARCH_SHOPIFY_FALLBACK_LIMIT = 10;
 const MISSING_ORDER_NOTIFICATION_WINDOW_MS = DAY_MS;
 const ORDER_ACTION_LOOKUP_CHUNK_SIZE = 250;

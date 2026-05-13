@@ -11,7 +11,7 @@ import {
 
 export const PRODUCT_CACHE_SCOPE = "products:list";
 export const PRODUCT_CACHE_FRESH_MS = HEAVY_VIEW_CACHE_FRESH_MS;
-export const PRODUCT_CACHE_PAGE_SIZE = 200;
+export const PRODUCT_CACHE_PAGE_SIZE = 100;
 export const PRODUCT_CACHE_REQUEST_TIMEOUT_MS = 2 * 60 * 1000;
 
 export const buildProductsCacheKey = (

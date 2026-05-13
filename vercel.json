@@ -7,10 +7,6 @@
     "api/bosta-shipment.js": {
       "memory": 512,
       "maxDuration": 10
-    },
-    "api/proxy.js": {
-      "memory": 512,
-      "maxDuration": 15
     }
   },
   "headers": [
@@ -37,10 +33,6 @@
     {
       "source": "/api/bosta-shipment",
       "destination": "/api/bosta-shipment"
-    },
-    {
-      "source": "/api/:path*",
-      "destination": "/api/proxy?path=:path*"
     },
     {
       "source": "/(.*)",
