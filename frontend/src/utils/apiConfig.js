@@ -1,5 +1,7 @@
 export const DEFAULT_DEV_API_BASE = "http://localhost:5000/api";
-export const DEFAULT_PROD_API_BASE = "/api";
+export const DEFAULT_PROD_API_BASE =
+  "https://monnprofit-production.up.railway.app/api";
+export const VERCEL_API_PROXY_BASE = "/api";
 
 export const normalizeApiBase = (value) =>
   String(value || "")
@@ -35,6 +37,15 @@ export const resolveApiBase = (env = process.env) => {
 
   if (configuredBase) {
     return configuredBase;
+  }
+
+  if (
+    env.NODE_ENV === "production" &&
+    String(env.REACT_APP_USE_VERCEL_API_PROXY || "")
+      .trim()
+      .toLowerCase() === "true"
+  ) {
+    return VERCEL_API_PROXY_BASE;
   }
 
   return env.NODE_ENV === "production"

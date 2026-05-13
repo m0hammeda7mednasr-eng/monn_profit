@@ -42,6 +42,10 @@ import {
 } from "../utils/viewCache";
 
 const SCANNER_CACHE_SCOPE = "bosta-scanner:history";
+const ENABLE_VERCEL_BOSTA_FALLBACK =
+  String(process.env.REACT_APP_ENABLE_VERCEL_BOSTA_FALLBACK || "")
+    .trim()
+    .toLowerCase() === "true";
 const INITIAL_FILTERS = {
   searchTerm: "",
   status: "all",
@@ -302,9 +306,13 @@ const fetchShipmentByTrackingNumber = async (trackingNumber) => {
     const response = await api.get(`/bosta/shipments/${trackingNumber}`);
     return response.data;
   } catch (apiError) {
+    if (!ENABLE_VERCEL_BOSTA_FALLBACK) {
+      throw apiError;
+    }
+
     try {
       const vercelResponse = await fetch(
-        `/api/bosta-shipment?trackingNumber=${trackingNumber}`,
+        `/api/bosta-shipment?trackingNumber=${encodeURIComponent(trackingNumber)}`,
       );
 
       if (!vercelResponse.ok) {

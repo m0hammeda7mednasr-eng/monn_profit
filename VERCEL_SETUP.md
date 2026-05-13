@@ -1,69 +1,41 @@
 # Vercel Deployment Setup
 
-## Environment Variables
+## Normal production setup
 
-You need to add the following environment variable in Vercel dashboard:
+Use Railway as the API origin so Vercel only serves the frontend assets:
 
-### BOSTA_API_KEY
+```env
+REACT_APP_API_BASE_URL=https://monnprofit-production.up.railway.app/api
+```
 
-1. Go to your Vercel project dashboard
-2. Click on "Settings" tab
-3. Click on "Environment Variables" in the sidebar
-4. Add new variable:
-   - **Name:** `BOSTA_API_KEY`
-   - **Value:** `f59a406a32d3741b2ad14bb32305897363e6025380b79c5a127b798de72a024a`
-   - **Environment:** Production, Preview, Development (select all)
-5. Click "Save"
+Redeploy Vercel after changing this variable because Create React App reads `REACT_APP_*` values at build time.
 
-### BACKEND_API_BASE_URL
+## Optional proxy fallback
 
-This should point to your deployed backend API base (must end with `/api`).
+Do not enable this for normal production traffic. It routes all API responses through a Vercel Function and can create high Network Egress bills.
 
-Example:
+```env
+REACT_APP_USE_VERCEL_API_PROXY=true
+BACKEND_API_BASE_URL=https://monnprofit-production.up.railway.app/api
+```
 
-- **Name:** `BACKEND_API_BASE_URL`
-- **Value:** `https://your-backend-domain.com/api`
-- **Environment:** Production, Preview, Development (select all)
+## Optional Bosta fallback
 
-## Redeploy
+The app now uses the Railway backend for Bosta lookups by default. Only enable the Vercel Bosta fallback when Railway Bosta is unavailable and you accept the extra Vercel Function/Egress cost.
 
-After adding the environment variable:
-
-1. Go to "Deployments" tab
-2. Click on the latest deployment
-3. Click "Redeploy" button
+```env
+REACT_APP_ENABLE_VERCEL_BOSTA_FALLBACK=true
+BOSTA_API_KEY=<your-bosta-api-key>
+```
 
 ## Testing
 
-Once deployed, test the Bosta Scanner with these tracking numbers:
+1. Open the app after redeploy.
+2. In browser DevTools, check that normal API requests go to `https://monnprofit-production.up.railway.app/api`.
+3. Confirm requests are not going through `/api/proxy` unless you intentionally enabled `REACT_APP_USE_VERCEL_API_PROXY=true`.
 
-- `DEMO123456789` - Demo shipment
-- `2695867962` - Test shipment from Bosta
-- `2685887962` - Alternative test number
+For the Railway backend, keep `ALLOW_VERCEL_APP_ORIGINS=true` unless you have a fixed custom domain list in `FRONTEND_URLS`.
 
-## How It Works
+## Secret hygiene
 
-The Vercel serverless function (`/api/bosta-shipment`) acts as a proxy:
-
-1. Frontend calls `/api/bosta-shipment?trackingNumber=XXX`
-2. Vercel function calls Bosta API with the API key (secure)
-3. Returns shipment data to frontend
-
-This works even if Railway backend is down!
-
-All other frontend API requests (`/api/users/*`, `/api/notifications/*`, etc.)
-are now proxied by `api/proxy.js` through Vercel rewrites to
-`BACKEND_API_BASE_URL`.
-
-## Troubleshooting
-
-If you get "API key not configured" error:
-
-1. Make sure you added `BOSTA_API_KEY` in Vercel environment variables
-2. Make sure you selected all environments (Production, Preview, Development)
-3. Redeploy the project after adding the variable
-
-If you get 404 errors:
-
-- The tracking number doesn't exist in Bosta system
-- Try the demo numbers listed above
+Never commit real API keys or service role keys in Markdown. Put them only in Railway/Vercel environment variables and rotate any key that was previously committed or shared.

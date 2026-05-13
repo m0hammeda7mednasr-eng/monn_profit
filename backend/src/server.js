@@ -35,12 +35,42 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const isDevelopment = process.env.NODE_ENV === "development";
+
+const parseCsvEnv = (value) =>
+  String(value || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+const toBooleanEnvFlag = (value, fallback = false) => {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+};
+
+const ALLOW_VERCEL_APP_ORIGINS = toBooleanEnvFlag(
+  process.env.ALLOW_VERCEL_APP_ORIGINS,
+  true,
+);
+
 const ALLOWED_CORS_ORIGINS = [
   "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:3002",
   "http://localhost:3003",
+  "https://monn-profit.vercel.app",
   process.env.FRONTEND_URL,
+  ...parseCsvEnv(process.env.FRONTEND_URLS),
 ].filter(Boolean);
 
 const normalizeCorsOrigin = (value) =>
@@ -48,9 +78,25 @@ const normalizeCorsOrigin = (value) =>
     .trim()
     .replace(/\/+$/, "");
 
+const isVercelAppOrigin = (origin) => {
+  try {
+    const url = new URL(origin);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === "vercel.app" || url.hostname.endsWith(".vercel.app"))
+    );
+  } catch {
+    return false;
+  }
+};
+
 const isAllowedCorsOrigin = (origin) => {
   const normalizedOrigin = normalizeCorsOrigin(origin);
   if (!normalizedOrigin) {
+    return true;
+  }
+
+  if (ALLOW_VERCEL_APP_ORIGINS && isVercelAppOrigin(normalizedOrigin)) {
     return true;
   }
 
