@@ -24,7 +24,7 @@ const router = express.Router();
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const CATALOG_CACHE_TTL_MS = 15 * 1000;
+const CATALOG_CACHE_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 200;
 const SHOPIFY_API_VERSION = "2024-01";

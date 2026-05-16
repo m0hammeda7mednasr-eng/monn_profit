@@ -4,6 +4,7 @@ import Sidebar from "../../components/Sidebar";
 import { useLocale } from "../../context/LocaleContext";
 import api from "../../utils/api";
 import { formatDateTime, formatNumber } from "../../utils/helpers";
+import { shouldAutoRefreshView } from "../../utils/refreshPolicy";
 import { extractArray } from "../../utils/response";
 import { subscribeToSharedDataUpdates } from "../../utils/realtime";
 import {
@@ -15,7 +16,6 @@ import {
   Users,
 } from "lucide-react";
 
-const POLLING_INTERVAL_MS = 120000;
 const ACTIVITY_LOG_PREVIEW_LIMIT = 12;
 
 const getTotalFromResponse = (payload) => {
@@ -89,13 +89,9 @@ const AdminPage = () => {
   useEffect(() => {
     fetchAdminData();
 
-    const interval = setInterval(() => {
-      if (document.visibilityState !== "visible") {
-        return;
-      }
-
-      fetchAdminData({ silent: true });
-    }, POLLING_INTERVAL_MS);
+    if (!shouldAutoRefreshView()) {
+      return undefined;
+    }
 
     const unsubscribe = subscribeToSharedDataUpdates(() => {
       fetchAdminData({ silent: true });
@@ -105,7 +101,6 @@ const AdminPage = () => {
     window.addEventListener("focus", onFocus);
 
     return () => {
-      clearInterval(interval);
       unsubscribe();
       window.removeEventListener("focus", onFocus);
     };

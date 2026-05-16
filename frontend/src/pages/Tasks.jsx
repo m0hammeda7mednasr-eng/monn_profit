@@ -17,6 +17,7 @@ import {
 import Sidebar from "../components/Sidebar";
 import { useLocale } from "../context/LocaleContext";
 import api, { getErrorMessage } from "../utils/api";
+import { shouldAutoRefreshView } from "../utils/refreshPolicy";
 import { extractArray } from "../utils/response";
 import {
   markSharedDataUpdated,
@@ -28,7 +29,6 @@ import {
 } from "../utils/taskGroups";
 import { formatDate, formatNumber } from "../utils/localeFormat";
 
-const POLLING_INTERVAL_MS = 30000;
 let assigneesEndpointUnsupported = false;
 let assigneesProbeInFlight = false;
 
@@ -143,16 +143,15 @@ export default function Tasks() {
   useEffect(() => {
     loadPageData();
 
-    const interval = setInterval(() => {
-      loadPageData({ silent: true });
-    }, POLLING_INTERVAL_MS);
+    if (!shouldAutoRefreshView()) {
+      return undefined;
+    }
 
     const unsubscribe = subscribeToSharedDataUpdates(() => {
       loadPageData({ silent: true });
     });
 
     return () => {
-      clearInterval(interval);
       unsubscribe();
     };
   }, [loadPageData]);

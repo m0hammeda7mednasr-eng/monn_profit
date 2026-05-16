@@ -10,6 +10,7 @@ import {
 import Sidebar from "../components/Sidebar";
 import { useLocale } from "../context/LocaleContext";
 import api, { getErrorMessage } from "../utils/api";
+import { shouldAutoRefreshView } from "../utils/refreshPolicy";
 import {
   getPermissionDescription,
   getPermissionLabel,
@@ -31,8 +32,6 @@ const getRequestablePermissions = (locale) => [
   { value: "can_view_all_reports", label: getPermissionLabel("can_view_all_reports", locale) },
   { value: "can_view_activity_log", label: getPermissionLabel("can_view_activity_log", locale) },
 ];
-
-const POLLING_INTERVAL_MS = 30000;
 
 export default function RequestAccess() {
   const { locale, select } = useLocale();
@@ -67,9 +66,9 @@ export default function RequestAccess() {
   useEffect(() => {
     fetchRequests();
 
-    const interval = setInterval(() => {
-      fetchRequests({ silent: true });
-    }, POLLING_INTERVAL_MS);
+    if (!shouldAutoRefreshView()) {
+      return undefined;
+    }
 
     const unsubscribe = subscribeToSharedDataUpdates(() => {
       fetchRequests({ silent: true });
@@ -79,7 +78,6 @@ export default function RequestAccess() {
     window.addEventListener("focus", onFocus);
 
     return () => {
-      clearInterval(interval);
       unsubscribe();
       window.removeEventListener("focus", onFocus);
     };

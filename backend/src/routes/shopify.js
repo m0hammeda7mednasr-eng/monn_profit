@@ -68,12 +68,12 @@ const UUID_REGEX =
 const ORDER_BACKGROUND_SYNC_COOLDOWN_MS = 45 * 1000;
 const ORDER_BACKGROUND_SYNC_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 const SHIPPING_ISSUE_HISTORY_RECOVERY_COOLDOWN_MS = 5 * 60 * 1000;
-const SHIPPING_ISSUE_ORDERS_CACHE_TTL_MS = 5 * 60 * 1000;
-const MISSING_ORDERS_CACHE_TTL_MS = 5 * 60 * 1000;
+const SHIPPING_ISSUE_ORDERS_CACHE_TTL_MS = 30 * 60 * 1000;
+const MISSING_ORDERS_CACHE_TTL_MS = 30 * 60 * 1000;
 const SCOPED_ENTITY_PAGE_CACHE_NAMESPACE = "shopify:scoped-entity-page";
 const PRODUCT_SUPPLIER_LINKS_CACHE_NAMESPACE = "shopify:product-supplier-links";
 const SCOPED_ENTITY_PAGE_CACHE_MAX_ENTRIES = 250;
-const PRODUCT_SUPPLIER_LINKS_CACHE_TTL_MS = 10 * 60 * 1000;
+const PRODUCT_SUPPLIER_LINKS_CACHE_TTL_MS = 60 * 60 * 1000;
 const toPositiveIntegerEnv = (
   name,
   fallback,
@@ -936,15 +936,15 @@ const writeTimedRowsCache = (cache, cacheKey, rows = []) => {
 
 const getScopedEntityPageCacheTtlMs = (tableName) => {
   if (tableName === "products") {
-    return 15 * 60 * 1000;
+    return 60 * 60 * 1000;
   }
 
   if (tableName === "customers") {
-    return 15 * 60 * 1000;
+    return 60 * 60 * 1000;
   }
 
   if (tableName === "orders") {
-    return 2 * 60 * 1000;
+    return 15 * 60 * 1000;
   }
 
   return 0;

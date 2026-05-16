@@ -7,6 +7,7 @@ import React, {
   useRef,
 } from "react";
 import api from "../utils/api";
+import { shouldAutoRefreshView } from "../utils/refreshPolicy";
 import {
   DEFAULT_CLIENT_PERMISSIONS,
   normalizeClientPermissions,
@@ -219,6 +220,10 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     loadAuthState({ silent: Boolean(initialCachedUser) });
+
+    if (!shouldAutoRefreshView()) {
+      return undefined;
+    }
 
     const interval = setInterval(() => {
       if (document.visibilityState !== "visible") {

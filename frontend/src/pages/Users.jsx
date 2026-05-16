@@ -20,10 +20,10 @@ import {
   normalizeClientPermissions,
   setPermissionWithDependencies,
 } from "../utils/permissionState";
+import { shouldAutoRefreshView } from "../utils/refreshPolicy";
 import { extractArray } from "../utils/response";
 import { subscribeToSharedDataUpdates } from "../utils/realtime";
 
-const POLLING_INTERVAL_MS = 30000;
 const TABS = ["users", "requests", "reports"];
 
 const getTabFromQuery = (value) => (TABS.includes(value) ? value : "users");
@@ -112,11 +112,9 @@ export default function Users() {
   useEffect(() => {
     loadPage();
 
-    const interval = setInterval(() => {
-      loadUsers();
-      loadAccessRequests();
-      loadDailyReports();
-    }, POLLING_INTERVAL_MS);
+    if (!shouldAutoRefreshView()) {
+      return undefined;
+    }
 
     const unsubscribe = subscribeToSharedDataUpdates(() => {
       loadUsers();
@@ -125,7 +123,6 @@ export default function Users() {
     });
 
     return () => {
-      clearInterval(interval);
       unsubscribe();
     };
   }, [loadAccessRequests, loadDailyReports, loadPage, loadUsers]);

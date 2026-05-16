@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import api from "../utils/api";
 import { formatDateTime, formatNumber } from "../utils/helpers";
+import { shouldAutoRefreshView } from "../utils/refreshPolicy";
 
 const TYPE_STYLES = {
   blue: {
@@ -110,6 +111,10 @@ const OrderComments = ({ orderId, orderNumber, legacyOrderId = null }) => {
     }
 
     fetchComments();
+
+    if (!shouldAutoRefreshView()) {
+      return undefined;
+    }
 
     const intervalId = setInterval(() => {
       fetchComments({ silent: true });

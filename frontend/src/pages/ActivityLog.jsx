@@ -4,10 +4,9 @@ import Sidebar from "../components/Sidebar";
 import { Clock, User, List } from "lucide-react";
 import { EmptyState, ErrorAlert, LoadingSpinner } from "../components/Common";
 import { useLocale } from "../context/LocaleContext";
+import { shouldAutoRefreshView } from "../utils/refreshPolicy";
 import { extractArray } from "../utils/response";
 import { subscribeToSharedDataUpdates } from "../utils/realtime";
-
-const POLLING_INTERVAL_MS = 30000;
 
 export default function ActivityLog() {
   const { select, formatDateTime } = useLocale();
@@ -45,9 +44,9 @@ export default function ActivityLog() {
   useEffect(() => {
     fetchLogs();
 
-    const interval = setInterval(() => {
-      fetchLogs({ silent: true });
-    }, POLLING_INTERVAL_MS);
+    if (!shouldAutoRefreshView()) {
+      return undefined;
+    }
 
     const unsubscribe = subscribeToSharedDataUpdates(() => {
       fetchLogs({ silent: true });
@@ -57,7 +56,6 @@ export default function ActivityLog() {
     window.addEventListener("focus", onFocus);
 
     return () => {
-      clearInterval(interval);
       unsubscribe();
       window.removeEventListener("focus", onFocus);
     };

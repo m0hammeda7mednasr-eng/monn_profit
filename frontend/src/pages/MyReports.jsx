@@ -11,6 +11,7 @@ import {
 import Sidebar from "../components/Sidebar";
 import { useLocale } from "../context/LocaleContext";
 import api, { getErrorMessage } from "../utils/api";
+import { shouldAutoRefreshView } from "../utils/refreshPolicy";
 import { extractArray } from "../utils/response";
 import { subscribeToSharedDataUpdates } from "../utils/realtime";
 import { formatDate, formatNumber } from "../utils/localeFormat";
@@ -23,7 +24,6 @@ const DEFAULT_FORM = {
   report_date: new Date().toISOString().split("T")[0],
 };
 
-const POLLING_INTERVAL_MS = 30000;
 const MIN_REPORTS_FETCH_GAP_MS = 5000;
 
 let reportsFetchInFlight = false;
@@ -107,12 +107,9 @@ export default function MyReports() {
   useEffect(() => {
     fetchReports();
 
-    const interval = setInterval(() => {
-      if (document.visibilityState !== "visible") {
-        return;
-      }
-      fetchReports({ silent: true });
-    }, POLLING_INTERVAL_MS);
+    if (!shouldAutoRefreshView()) {
+      return undefined;
+    }
 
     const unsubscribe = subscribeToSharedDataUpdates(() => {
       fetchReports({ silent: true });
@@ -122,7 +119,6 @@ export default function MyReports() {
     window.addEventListener("focus", onFocus);
 
     return () => {
-      clearInterval(interval);
       unsubscribe();
       window.removeEventListener("focus", onFocus);
     };

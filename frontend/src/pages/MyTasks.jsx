@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import api, { getErrorMessage } from "../utils/api";
+import { shouldAutoRefreshView } from "../utils/refreshPolicy";
 import { extractArray } from "../utils/response";
 import {
   markSharedDataUpdated,
@@ -17,8 +18,6 @@ import {
 } from "../utils/realtime";
 import { normalizeTaskRecord } from "../utils/taskGroups";
 import { formatDate, formatNumber } from "../utils/localeFormat";
-
-const POLLING_INTERVAL_MS = 30000;
 
 export default function MyTasks() {
   const [tasks, setTasks] = useState([]);
@@ -47,16 +46,15 @@ export default function MyTasks() {
   useEffect(() => {
     fetchTasks();
 
-    const interval = setInterval(() => {
-      fetchTasks({ silent: true });
-    }, POLLING_INTERVAL_MS);
+    if (!shouldAutoRefreshView()) {
+      return undefined;
+    }
 
     const unsubscribe = subscribeToSharedDataUpdates(() => {
       fetchTasks({ silent: true });
     });
 
     return () => {
-      clearInterval(interval);
       unsubscribe();
     };
   }, [fetchTasks]);

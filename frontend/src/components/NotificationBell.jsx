@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell, BellOff, CheckCheck, CircleDot } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import api from "../utils/api";
+import { shouldAutoRefreshView } from "../utils/refreshPolicy";
 import { subscribeToSharedDataUpdates } from "../utils/realtime";
 import { useAuth } from "../context/AuthContext";
 import { useLocale } from "../context/LocaleContext";
@@ -243,6 +244,11 @@ export default function NotificationBell() {
     }
 
     fetchUnreadCount();
+
+    if (!shouldAutoRefreshView()) {
+      return undefined;
+    }
+
     const interval = setInterval(() => {
       if (document.visibilityState !== "visible") {
         return;
@@ -253,7 +259,11 @@ export default function NotificationBell() {
   }, [fetchUnreadCount, notificationsApiAvailable]);
 
   useEffect(() => {
-    if (!notificationsApiAvailable || notificationsEndpointUnsupported) {
+    if (
+      !notificationsApiAvailable ||
+      notificationsEndpointUnsupported ||
+      !shouldAutoRefreshView()
+    ) {
       return;
     }
 

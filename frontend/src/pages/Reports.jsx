@@ -19,6 +19,7 @@ import {
 import Sidebar from "../components/Sidebar";
 import { useLocale } from "../context/LocaleContext";
 import api, { getErrorMessage } from "../utils/api";
+import { shouldAutoRefreshView } from "../utils/refreshPolicy";
 import { extractArray } from "../utils/response";
 import { subscribeToSharedDataUpdates } from "../utils/realtime";
 import { formatDate, formatNumber, formatPercent } from "../utils/localeFormat";
@@ -29,7 +30,6 @@ const RANGE_OPTIONS = [
   { label: "90 Days", value: 90 },
 ];
 
-const POLLING_INTERVAL_MS = 120000;
 const LATEST_REPORTS_LIMIT = 30;
 let reportsAnalyticsEndpointUnsupported = false;
 let analyticsRequestInFlight = false;
@@ -137,13 +137,9 @@ export default function Reports() {
   useEffect(() => {
     fetchReportsData(days);
 
-    const interval = setInterval(() => {
-      if (document.visibilityState !== "visible") {
-        return;
-      }
-
-      fetchReportsData(days, { silent: true });
-    }, POLLING_INTERVAL_MS);
+    if (!shouldAutoRefreshView()) {
+      return undefined;
+    }
 
     const unsubscribe = subscribeToSharedDataUpdates(() => {
       fetchReportsData(days, { silent: true });
@@ -155,7 +151,6 @@ export default function Reports() {
     window.addEventListener("focus", onFocus);
 
     return () => {
-      clearInterval(interval);
       unsubscribe();
       window.removeEventListener("focus", onFocus);
     };
